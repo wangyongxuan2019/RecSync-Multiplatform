@@ -1,0 +1,84 @@
+plugins {
+    id 'application'
+    id 'org.openjfx.javafxplugin' version '0.1.0'
+    id 'org.beryx.jlink' version '3.0.1'
+}
+
+javafx {
+    version = "21.0.1"
+    modules = ['javafx.controls', 'javafx.fxml']
+}
+
+dependencies {
+    implementation project(':recsync-core')
+    implementation 'org.controlsfx:controlsfx:11.2.0'
+}
+
+application {
+    mainModule = 'com.recsync.leader'
+    mainClass = 'com.recsync.leader.LeaderApplication'
+}
+
+jlink {
+    options = ['--strip-debug', '--compress', '2', '--no-header-files', '--no-man-pages']
+
+    launcher {
+        name = 'RecSync-Leader'
+    }
+
+    jpackage {
+        outputDir = 'build/installer'
+
+        // Windows 配置
+        if (System.getProperty('os.name').toLowerCase().contains('windows')) {
+            installerType = 'exe'
+            installerOptions = [
+                '--win-dir-chooser',
+                '--win-menu',
+                '--win-shortcut',
+                '--vendor', 'RecSync',
+                '--app-version', '1.0.0',
+                '--description', 'RecSync Leader - 多机位录制控制端',
+                '--copyright', 'Copyright © 2025',
+                '--license-file', '../LICENSE.txt'
+            ]
+
+            // 图标文件路径（如果存在）
+            def iconFile = file('src/main/resources/icon.ico')
+            if (iconFile.exists()) {
+                installerOptions += ['--icon', iconFile.absolutePath]
+            }
+        }
+
+        // macOS 配置
+        if (System.getProperty('os.name').toLowerCase().contains('mac')) {
+            installerType = 'dmg'
+            installerOptions = [
+                '--vendor', 'RecSync',
+                '--app-version', '1.0.0',
+                '--copyright', 'Copyright © 2025'
+            ]
+
+            def iconFile = file('src/main/resources/icon.icns')
+            if (iconFile.exists()) {
+                installerOptions += ['--icon', iconFile.absolutePath]
+            }
+        }
+
+        // Linux 配置
+        if (System.getProperty('os.name').toLowerCase().contains('linux')) {
+            installerType = 'deb'
+            installerOptions = [
+                '--vendor', 'RecSync',
+                '--app-version', '1.0.0',
+                '--copyright', 'Copyright © 2025',
+                '--linux-shortcut'
+            ]
+
+            def iconFile = file('src/main/resources/icon.png')
+            if (iconFile.exists()) {
+                installerOptions += ['--icon', iconFile.absolutePath]
+            }
+        }
+    }
+}

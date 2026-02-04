@@ -1,0 +1,164 @@
+plugins {
+    id 'application'
+    id 'org.openjfx.javafxplugin' version '0.1.0'
+    id 'org.beryx.jlink' version '3.0.1'
+}
+
+javafx {
+    version = "21.0.1"
+    modules = ['javafx.controls', 'javafx.fxml', 'javafx.swing']
+}
+
+dependencies {
+    implementation project(':recsync-core')
+
+    // JavaCV for camera with platform-specific native libraries
+    def javacvVersion = '1.5.10'
+    def osName = System.getProperty('os.name').toLowerCase()
+    def classifier = osName.contains('windows') ? 'windows-x86_64' :
+                    (osName.contains('mac') ? 'macosx-x86_64' : 'linux-x86_64')
+
+    implementation "org.bytedeco:javacpp:${javacvVersion}"
+    implementation "org.bytedeco:javacpp:${javacvVersion}:${classifier}"
+    implementation "org.bytedeco:javacv:${javacvVersion}"
+    implementation "org.bytedeco:opencv:4.7.0-${javacvVersion}"
+    implementation "org.bytedeco:opencv:4.7.0-${javacvVersion}:${classifier}"
+    implementation "org.bytedeco:ffmpeg:6.0-${javacvVersion}"
+    implementation "org.bytedeco:ffmpeg:6.0-${javacvVersion}:${classifier}"
+    implementation "org.bytedeco:openblas:0.3.23-${javacvVersion}"
+    implementation "org.bytedeco:openblas:0.3.23-${javacvVersion}:${classifier}"
+    implementation "org.bytedeco:javacv-platform:${javacvVersion}"  // 保留以确保录制功能完整
+
+    implementation 'org.controlsfx:controlsfx:11.2.0'
+}
+
+application {
+    // 暂时禁用模块系统以解决原生库加载问题
+    // mainModule = 'com.recsync.client'
+    mainClass = 'com.recsync.client.ClientApplication'
+
+    // 添加VM参数以正确加载原生库
+    applicationDefaultJvmArgs = [
+        '-Djava.library.path=.',
+        '--add-opens=java.base/java.lang=ALL-UNNAMED',
+        '--add-opens=java.base/java.nio=ALL-UNNAMED'
+    ]
+}
+
+jlink {
+    options = ['--strip-debug', '--compress', '2', '--no-header-files', '--no-man-pages']
+
+    launcher {
+        name = 'RecSync-Client'
+    }
+
+    jpackage {
+        outputDir = 'build/installer'
+
+        // Windows 配置
+        if (System.getProperty('os.name').toLowerCase().contains('windows')) {
+            installerType = 'exe'
+            installerOptions = [
+                '--win-dir-chooser',
+                '--win-menu',
+                '--win-shortcut',
+                '--vendor', 'RecSync',
+                '--app-version', '1.0.0',
+                '--description', 'RecSync Client - 多机位录制客户端',
+                '--copyright', 'Copyright © 2025',
+                '--license-file', '../LICENSE.txt'
+            ]
+
+            // 图标文件路径（如果存在）
+            def iconFile = file('src/main/resources/icon.ico')
+            if (iconFile.exists()) {
+                installerOptions += ['--icon', iconFile.absolutePath]
+            }
+        }
+
+        // macOS 配置
+        if (System.getProperty('os.name').toLowerCase().contains('mac')) {
+            installerType = 'dmg'
+            installerOptions = [
+                '--vendor', 'RecSync',
+                '--app-version', '1.0.0',
+                '--copyright', 'Copyright © 2025'
+            ]
+
+            def iconFile = file('src/main/resources/icon.icns')
+            if (iconFile.exists()) {
+                installerOptions += ['--icon', iconFile.absolutePath]
+            }
+        }
+
+        // Linux 配置
+        if (System.getProperty('os.name').toLowerCase().contains('linux')) {
+            installerType = 'deb'
+            installerOptions = [
+                '--vendor', 'RecSync',
+                '--app-version', '1.0.0',
+                '--copyright', 'Copyright © 2025',
+                '--linux-shortcut'
+            ]
+
+            def iconFile = file('src/main/resources/icon.png')
+            if (iconFile.exists()) {
+                installerOptions += ['--icon', iconFile.absolutePath]
+            }
+        }
+    }
+}
+
+// 复制JavaCV原生库到jlink镜像
+task copyNativeLibs(type: Copy) {
+    from {
+        // 从所有JavaCV依赖中提取原生库
+        configurations.runtimeClasspath.filter {
+            it.name.contains('javacpp') ||
+            it.name.contains('opencv') ||
+            it.name.contains('ffmpeg') ||
+            it.name.contains('openblas')
+        }.collect { zipTree(it) }
+    }
+    include '**/*.dll'  // Windows
+    include '**/*.so'   // Linux
+    include '**/*.dylib' // macOS
+    into "${buildDir}/image/bin"
+    duplicatesStrategy = DuplicatesStrategy.WARN
+}
+
+// 扁平化复制：把所有DLL拷贝到bin根目录
+task flattenNativeLibs {
+    dependsOn copyNativeLibs
+    doLast {
+        def binDir = file("${buildDir}/image/bin")
+        fileTree(binDir).matching {
+            include '**/*.dll'
+            include '**/*.so'
+            include '**/*.dylib'
+        }.each { file ->
+            if (file.parentFile.name != 'bin') {
+                copy {
+                    from file
+                    into binDir
+                    duplicatesStrategy = DuplicatesStrategy.INCLUDE
+                }
+            }
+        }
+        println "Flattened native libraries to bin directory"
+    }
+}
+
+// 确保jlink之后执行
+tasks.named('jlink').configure {
+    finalizedBy flattenNativeLibs
+}
+
+// 确保jpackage相关任务依赖于flattenNativeLibs
+tasks.withType(org.beryx.jlink.JPackageImageTask).configureEach {
+    dependsOn flattenNativeLibs
+}
+
+tasks.withType(org.beryx.jlink.JPackageTask).configureEach {
+    dependsOn flattenNativeLibs
+}

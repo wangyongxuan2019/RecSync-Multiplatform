@@ -1,0 +1,5 @@
+rootProject.name = 'RecSync-Multiplatform'
+
+include 'recsync-core'
+include 'desktop-leader'
+include 'desktop-client'

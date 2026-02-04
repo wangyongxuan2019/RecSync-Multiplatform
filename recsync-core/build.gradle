@@ -1,0 +1,14 @@
+plugins {
+    id 'java-library'
+}
+
+dependencies {
+    // JmDNS for service discovery
+    implementation 'org.jmdns:jmdns:3.5.9'
+
+    // Commons IO for file operations
+    implementation 'commons-io:commons-io:2.15.1'
+
+    // SLF4J logging (API only, implementation in apps)
+    api 'org.slf4j:slf4j-api:2.0.9'
+}
