@@ -12,25 +12,11 @@ javafx {
 dependencies {
     implementation project(':recsync-core')
 
-    // JavaCV - Windows 平台专用配置
+    // JavaCV - 使用platform自动处理原生库
     def javacvVersion = '1.5.10'
 
-    // 核心库
-    implementation "org.bytedeco:javacpp:${javacvVersion}"
-    implementation "org.bytedeco:javacpp:${javacvVersion}:windows-x86_64"
-    implementation "org.bytedeco:javacv:${javacvVersion}"
-
-    // OpenCV - 视频采集
-    implementation "org.bytedeco:opencv:4.9.0-${javacvVersion}"
-    implementation "org.bytedeco:opencv:4.9.0-${javacvVersion}:windows-x86_64"
-
-    // FFmpeg - 视频编码
-    implementation "org.bytedeco:ffmpeg:6.1.1-${javacvVersion}"
-    implementation "org.bytedeco:ffmpeg:6.1.1-${javacvVersion}:windows-x86_64"
-
-    // OpenBLAS - OpenCV 依赖
-    implementation "org.bytedeco:openblas:0.3.26-${javacvVersion}"
-    implementation "org.bytedeco:openblas:0.3.26-${javacvVersion}:windows-x86_64"
+    // JavaCV平台包（自动包含所有原生库）
+    implementation "org.bytedeco:javacv-platform:${javacvVersion}"
 
     implementation 'org.controlsfx:controlsfx:11.2.0'
 }
@@ -46,6 +32,37 @@ application {
         '--add-opens=java.base/java.lang=ALL-UNNAMED',
         '--add-opens=java.base/java.nio=ALL-UNNAMED'
     ]
+}
+
+// 提取原生库到项目根目录（用于开发环境运行）
+task extractNativeLibs(type: Copy) {
+    from {
+        configurations.runtimeClasspath.filter {
+            it.name.contains('javacpp') ||
+            it.name.contains('opencv') ||
+            it.name.contains('ffmpeg') ||
+            it.name.contains('openblas')
+        }.collect { zipTree(it) }
+    }
+    include '**/*.dll'
+    into "${projectDir}/native-libs"
+    eachFile { fcd ->
+        fcd.relativePath = new RelativePath(true, fcd.name)
+    }
+    includeEmptyDirs = false
+    duplicatesStrategy = DuplicatesStrategy.INCLUDE
+}
+
+// 运行前确保原生库已提取
+tasks.named('run').configure {
+    dependsOn extractNativeLibs
+    doFirst {
+        // 设置库路径包含native-libs目录
+        def nativeDir = file("${projectDir}/native-libs")
+        if (nativeDir.exists()) {
+            systemProperty 'java.library.path', nativeDir.absolutePath
+        }
+    }
 }
 
 jlink {

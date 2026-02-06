@@ -47,6 +47,12 @@ public class SyncConstants {
     public static final int METHOD_START_RECORDING = 200_003;
     public static final int METHOD_STOP_RECORDING = 200_004;
     public static final int METHOD_UPDATE_CLIENT_NAME = 200_005;  // 更新客户端名称
+    public static final int METHOD_CLIENT_STATUS = 200_006;       // 客户端状态上报
+
+    // Client Status Codes
+    public static final int CLIENT_STATUS_CAMERA_NOT_READY = 0;   // 摄像头未就绪
+    public static final int CLIENT_STATUS_CAMERA_READY = 1;       // 摄像头就绪
+    public static final int CLIENT_STATUS_RECORDING = 2;          // 正在录制
 
     // Service Discovery
     public static final String MDNS_SERVICE_TYPE = "_recsync-leader._tcp.local.";

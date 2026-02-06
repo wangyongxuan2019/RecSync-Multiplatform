@@ -29,6 +29,9 @@ import java.nio.file.Paths;
 import java.text.SimpleDateFormat;
 import java.util.Date;
 import java.util.List;
+import java.util.concurrent.Executors;
+import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.TimeUnit;
 
 public class ClientApplication extends Application {
     private static final Logger logger = LoggerFactory.getLogger(ClientApplication.class);
@@ -38,6 +41,7 @@ public class ClientApplication extends Application {
     private SoftwareSyncClient syncClient;
     private JavaCVCameraController cameraController;
     private FileUploadClient uploadClient;
+    private ScheduledExecutorService statusReporter;  // 状态上报定时器
 
     // UI组件
     private TextField deviceNameField;
@@ -606,6 +610,9 @@ public class ClientApplication extends Application {
                     connectionStatusLabel.setStyle("-fx-font-size: 12px; -fx-text-fill: #27ae60; -fx-font-weight: bold;");
                 });
 
+                // 启动状态上报定时器（每秒上报一次）
+                startStatusReporter();
+
                 logger.info("✅ 已连接到Leader: {}", leaderIP);
 
             } catch (Exception e) {
@@ -1055,9 +1062,54 @@ public class ClientApplication extends Application {
         if (discoveryService != null) {
             discoveryService.stop();
         }
+        stopStatusReporter();
 
         Platform.exit();
         System.exit(0);
+    }
+
+    /**
+     * 启动状态上报定时器
+     */
+    private void startStatusReporter() {
+        stopStatusReporter();  // 确保没有重复的定时器
+        statusReporter = Executors.newSingleThreadScheduledExecutor();
+        statusReporter.scheduleAtFixedRate(() -> {
+            try {
+                if (syncClient != null && isConnected) {
+                    int status = getCurrentCameraStatus();
+                    String payload = deviceName + "|" + status;
+                    syncClient.sendRpcToLeader(SyncConstants.METHOD_CLIENT_STATUS, payload);
+                }
+            } catch (Exception e) {
+                logger.debug("状态上报失败: {}", e.getMessage());
+            }
+        }, 0, 1, TimeUnit.SECONDS);
+        logger.info("状态上报已启动");
+    }
+
+    /**
+     * 停止状态上报定时器
+     */
+    private void stopStatusReporter() {
+        if (statusReporter != null) {
+            statusReporter.shutdownNow();
+            statusReporter = null;
+            logger.info("状态上报已停止");
+        }
+    }
+
+    /**
+     * 获取当前摄像头状态
+     */
+    private int getCurrentCameraStatus() {
+        if (cameraController == null || !cameraController.isRunning()) {
+            return SyncConstants.CLIENT_STATUS_CAMERA_NOT_READY;
+        }
+        if (cameraController.isRecording()) {
+            return SyncConstants.CLIENT_STATUS_RECORDING;
+        }
+        return SyncConstants.CLIENT_STATUS_CAMERA_READY;
     }
 
     /**

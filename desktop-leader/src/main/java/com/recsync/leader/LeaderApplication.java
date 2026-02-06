@@ -21,6 +21,7 @@ import java.io.IOException;
 import java.net.InetAddress;
 import java.text.SimpleDateFormat;
 import java.util.Date;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicInteger;
 
 public class LeaderApplication extends Application {
@@ -76,6 +77,9 @@ public class LeaderApplication extends Application {
     private TextField subjectHeightField; // 测试者身高
     private Label subjectBMILabel;        // BMI显示标签
     private SubjectInfo currentSubjectInfo; // 当前测试者信息
+
+    // 客户端状态管理
+    private ConcurrentHashMap<String, Integer> clientCameraStatus = new ConcurrentHashMap<>();  // 设备名 -> 摄像头状态
 
     @Override
     public void start(Stage primaryStage) {
@@ -947,7 +951,21 @@ public class LeaderApplication extends Application {
 
     private void handleRpcCallback(int method, String payload, InetAddress fromAddress) {
         logger.debug("收到RPC回调: method={}, payload={}, from={}", method, payload, fromAddress.getHostAddress());
-        // 可以在这里处理来自Client的自定义RPC消息
+
+        if (method == SyncConstants.METHOD_CLIENT_STATUS) {
+            // 处理客户端状态上报: deviceName|status
+            try {
+                String[] parts = payload.split("\\|");
+                if (parts.length >= 2) {
+                    String deviceName = parts[0];
+                    int status = Integer.parseInt(parts[1]);
+                    clientCameraStatus.put(deviceName, status);
+                    logger.debug("客户端状态更新: {} -> {}", deviceName, status);
+                }
+            } catch (Exception e) {
+                logger.error("解析客户端状态失败: {}", payload, e);
+            }
+        }
     }
 
     private FileReceiveServer.FileReceiveListener createFileReceiveListener() {
@@ -1021,10 +1039,25 @@ public class LeaderApplication extends Application {
             Platform.runLater(() -> {
                 clientListView.getItems().clear();
                 clients.forEach((addr, info) -> {
-                    String status = info.isCurrentlySynced() ? "✅" : "⏳";
+                    String syncStatus = info.isCurrentlySynced() ? "✅" : "⏳";
+
+                    // 获取摄像头状态
+                    Integer camStatus = clientCameraStatus.get(info.name());
+                    String camIcon;
+                    if (camStatus == null) {
+                        camIcon = "❓";  // 未知状态
+                    } else if (camStatus == SyncConstants.CLIENT_STATUS_RECORDING) {
+                        camIcon = "🔴";  // 录制中
+                    } else if (camStatus == SyncConstants.CLIENT_STATUS_CAMERA_READY) {
+                        camIcon = "📷";  // 摄像头就绪
+                    } else {
+                        camIcon = "⚫";  // 摄像头未就绪
+                    }
+
                     clientListView.getItems().add(
-                            String.format("%s %s (%s) - 延迟: %.2fms",
-                                    status,
+                            String.format("%s %s %s (%s) - 延迟: %.2fms",
+                                    syncStatus,
+                                    camIcon,
                                     info.name(),
                                     addr.getHostAddress(),
                                     info.syncAccuracyNs() / 1_000_000.0)
@@ -1114,6 +1147,35 @@ public class LeaderApplication extends Application {
      * 执行实际的录制启动逻辑
      */
     private void doStartRecording() {
+        // 检查客户端摄像头状态
+        if (syncLeader != null) {
+            var clients = syncLeader.getClients();
+            java.util.List<String> notReadyClients = new java.util.ArrayList<>();
+
+            for (var entry : clients.entrySet()) {
+                String clientName = entry.getValue().name();
+                Integer camStatus = clientCameraStatus.get(clientName);
+
+                if (camStatus == null || camStatus == SyncConstants.CLIENT_STATUS_CAMERA_NOT_READY) {
+                    notReadyClients.add(clientName);
+                }
+            }
+
+            if (!notReadyClients.isEmpty()) {
+                String message = "以下客户端摄像头未就绪：\n" + String.join(", ", notReadyClients) +
+                                "\n\n是否继续录制？（未就绪的客户端将无法录制）";
+                Alert alert = new Alert(Alert.AlertType.CONFIRMATION, message,
+                    ButtonType.YES, ButtonType.NO);
+                alert.setTitle("客户端未就绪");
+                alert.setHeaderText("检测到部分客户端摄像头未就绪");
+                var result = alert.showAndWait();
+                if (result.isEmpty() || result.get() != ButtonType.YES) {
+                    updateStatusBar("录制已取消 - 请等待所有客户端摄像头就绪");
+                    return;
+                }
+            }
+        }
+
         // 生成新的批次ID
         generateBatchId();
 
