@@ -88,16 +88,12 @@ public class FileReceiveServer {
             String simplifiedFileName;
 
             if (fileInfo != null) {
-                // 创建分层目录：{archiveDir}/{测试者ID}/{动作ID}/{回合ID}/{重测ID}/
+                // 创建分层目录：{archiveDir}/{测试者ID}/{动作ID}_{回合ID}/
                 targetDir = Paths.get(archiveDir,
                                      fileInfo.subjectId,
-                                     fileInfo.movementId,
-                                     fileInfo.episodeId,
-                                     fileInfo.retakeId);
-                // 简化文件名：{设备名}_{时间戳}.mp4
-                simplifiedFileName = String.format("%s_%s.mp4",
-                                                  fileInfo.deviceName,
-                                                  fileInfo.timestamp);
+                                     fileInfo.movementId + "_" + fileInfo.episodeId);
+                // 简化文件名：{设备名}.mp4
+                simplifiedFileName = fileInfo.deviceName + ".mp4";
             } else {
                 // 无法解析，使用旧逻辑（按设备名分类）
                 targetDir = Paths.get(archiveDir, sanitizeDeviceName(request.deviceName));
@@ -107,9 +103,10 @@ public class FileReceiveServer {
             Files.createDirectories(targetDir);
             Path targetFile = targetDir.resolve(simplifiedFileName);
 
+            // 覆盖模式：如果文件存在，先删除
             if (Files.exists(targetFile)) {
-                sendResponse(out, MessageType.UPLOAD_REJECTED, "文件已存在");
-                return;
+                Files.delete(targetFile);
+                logger.info("覆盖模式：已删除旧文件 {}", targetFile);
             }
 
             sendResponse(out, MessageType.UPLOAD_ACCEPTED, "准备接收");
@@ -239,11 +236,8 @@ public class FileReceiveServer {
 
     /**
      * 解析文件名，提取分层信息
-     * 文件名格式：
-     * - 正式录制：{设备名}_{测试者ID}_{动作ID}_{时间戳}_{回合ID}.mp4
-     *   例如：front_s01_m01_20260114150230_e1.mp4
-     * - 重测录制：{设备名}_{测试者ID}_{动作ID}_{时间戳}_{回合ID}_retake{N}.mp4
-     *   例如：front_s01_m01_20260114150435_e1_retake1.mp4
+     * 文件名格式：{测试者ID}_{动作ID}_{回合ID}_{设备名}.mp4
+     * 例如：s01_m01_e1_front.mp4
      */
     private FileNameInfo parseFileName(String fileName) {
         try {
@@ -253,27 +247,16 @@ public class FileReceiveServer {
             // 分割文件名
             String[] parts = nameWithoutExt.split("_");
 
-            // 至少需要5个部分：设备名_测试者ID_动作ID_时间戳_回合ID
-            if (parts.length < 5) {
+            // 需要4个部分：测试者ID_动作ID_回合ID_设备名
+            if (parts.length < 4) {
                 logger.warn("文件名格式不符合分层要求，无法解析: {}", fileName);
                 return null;
             }
 
-            String deviceName = parts[0];
-            String subjectId = parts[1];
-            String movementId = parts[2];
-            String timestamp = parts[3];
-            String episodeId = parts[4];
-
-            // 检查是否有重测标记
-            String retakeId = "r0000"; // 默认为正式录制
-            if (parts.length >= 6 && parts[5].equals("retake")) {
-                // 有retake标记，parts[6]是重测号
-                if (parts.length >= 7) {
-                    int retakeNum = Integer.parseInt(parts[6]);
-                    retakeId = String.format("r%04d", retakeNum);
-                }
-            }
+            String subjectId = parts[0];
+            String movementId = parts[1];
+            String episodeId = parts[2];
+            String deviceName = parts[3];
 
             // 验证各部分格式
             if (!subjectId.matches("s\\d+") || !movementId.matches("m\\d+") ||
@@ -282,12 +265,10 @@ public class FileReceiveServer {
                 return null;
             }
 
-            logger.info("✅ 解析文件名成功: {} -> {}/{}/{}/{}/{}_{}.mp4",
-                       fileName, subjectId, movementId, episodeId, retakeId,
-                       deviceName, timestamp);
+            logger.info("✅ 解析文件名成功: {} -> {}/{}_{}/{}.mp4",
+                       fileName, subjectId, movementId, episodeId, deviceName);
 
-            return new FileNameInfo(deviceName, subjectId, movementId,
-                                   episodeId, retakeId, timestamp);
+            return new FileNameInfo(subjectId, movementId, episodeId, deviceName);
 
         } catch (Exception e) {
             logger.error("解析文件名失败: {}", fileName, e);
@@ -299,21 +280,16 @@ public class FileReceiveServer {
      * 文件名信息类
      */
     private static class FileNameInfo {
-        final String deviceName;
         final String subjectId;
         final String movementId;
         final String episodeId;
-        final String retakeId;
-        final String timestamp;
+        final String deviceName;
 
-        FileNameInfo(String deviceName, String subjectId, String movementId,
-                    String episodeId, String retakeId, String timestamp) {
-            this.deviceName = deviceName;
+        FileNameInfo(String subjectId, String movementId, String episodeId, String deviceName) {
             this.subjectId = subjectId;
             this.movementId = movementId;
             this.episodeId = episodeId;
-            this.retakeId = retakeId;
-            this.timestamp = timestamp;
+            this.deviceName = deviceName;
         }
     }
 }

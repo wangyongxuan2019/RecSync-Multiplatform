@@ -59,14 +59,13 @@ public class LeaderApplication extends Application {
     private TextField subjectIdField;     // 测试者ID输入框
     private TextField movementIdField;    // 动作ID输入框
     private Label episodeLabel;           // 回合ID显示标签
-    private Label retakeLabel;            // 重测次数显示标签
     private int currentEpisodeNumber = 1; // 当前回合号（自动递增）
     private String currentSubjectId = "s01";   // 当前测试者ID
     private String currentMovementId = "m01";  // 当前动作ID
     private TextField maxEpisodesField;   // 最大回合数
     private TextField maxMovementsField;  // 最大动作数
-    private int maxEpisodes = 5;          // 默认最大回合数
-    private int maxMovements = 3;         // 默认最大动作数
+    private int maxEpisodes = 3;          // 默认最大回合数
+    private int maxMovements = 2;         // 默认最大动作数
     private int currentRetakeNumber = 0;  // 当前重测次数（0=正式录制，1+=重测）
 
     // 测试者信息管理
@@ -347,7 +346,7 @@ public class LeaderApplication extends Application {
             "-fx-padding: 10 20;" +
             "-fx-cursor: hand;"
         );
-        retakeBtn.setOnAction(e -> retakeCurrentEpisode());
+        retakeBtn.setOnAction(e -> retakeLastEpisode());
 
         auxButtonsBox.getChildren().addAll(phaseAlignBtn, retakeBtn);
 
@@ -599,7 +598,7 @@ public class LeaderApplication extends Application {
         Label sectionTitle = new Label("📋 实验数据管理");
         sectionTitle.setStyle("-fx-font-size: 13px; -fx-font-weight: bold; -fx-text-fill: #2c3e50;");
 
-        // 第一行：测试者ID和动作ID
+        // 第一行：测试者ID、动作ID、当前回合
         HBox row1 = new HBox(15);
         row1.setAlignment(Pos.CENTER_LEFT);
 
@@ -623,24 +622,12 @@ public class LeaderApplication extends Application {
         episodeLabel.setStyle("-fx-font-size: 13px; -fx-font-weight: bold; -fx-text-fill: #e74c3c; " +
                              "-fx-background-color: white; -fx-padding: 3 10; -fx-background-radius: 3;");
 
-        Label retakeLabelText = new Label("重测:");
-        retakeLabelText.setStyle("-fx-font-size: 12px; -fx-text-fill: black;");
-        retakeLabel = new Label(String.format("r%04d", currentRetakeNumber));
-        retakeLabel.setStyle("-fx-font-size: 13px; -fx-font-weight: bold; -fx-text-fill: #9b59b6; " +
-                            "-fx-background-color: white; -fx-padding: 3 10; -fx-background-radius: 3;");
-
         row1.getChildren().addAll(subjectLabel, subjectIdField, movementLabel, movementIdField,
-                                 episodeLabelText, episodeLabel, retakeLabelText, retakeLabel);
+                                 episodeLabelText, episodeLabel);
 
-        // 第二行：回合数和动作数
+        // 第二行：动作数、回合数、应用按钮
         HBox row2 = new HBox(15);
         row2.setAlignment(Pos.CENTER_LEFT);
-
-        Label maxEpisodesLabel = new Label("回合数:");
-        maxEpisodesLabel.setStyle("-fx-font-size: 12px; -fx-text-fill: black;");
-        maxEpisodesField = new TextField(String.valueOf(maxEpisodes));
-        maxEpisodesField.setPrefWidth(60);
-        maxEpisodesField.setStyle("-fx-font-size: 12px;");
 
         Label maxMovementsLabel = new Label("动作数:");
         maxMovementsLabel.setStyle("-fx-font-size: 12px; -fx-text-fill: black;");
@@ -648,21 +635,27 @@ public class LeaderApplication extends Application {
         maxMovementsField.setPrefWidth(60);
         maxMovementsField.setStyle("-fx-font-size: 12px;");
 
-        row2.getChildren().addAll(maxEpisodesLabel, maxEpisodesField, maxMovementsLabel, maxMovementsField);
-
-        // 第三行：快捷按钮
-        HBox row3 = new HBox(8);
-        row3.setAlignment(Pos.CENTER_LEFT);
+        Label maxEpisodesLabel = new Label("回合数:");
+        maxEpisodesLabel.setStyle("-fx-font-size: 12px; -fx-text-fill: black;");
+        maxEpisodesField = new TextField(String.valueOf(maxEpisodes));
+        maxEpisodesField.setPrefWidth(60);
+        maxEpisodesField.setStyle("-fx-font-size: 12px;");
 
         Button applyBtn = new Button("✓ 应用");
         applyBtn.setStyle("-fx-font-size: 11px; -fx-background-color: #2980b9; " +
                         "-fx-text-fill: white; -fx-background-radius: 3; -fx-padding: 4 12; -fx-cursor: hand;");
         applyBtn.setOnAction(e -> applyExperimentData());
 
-        Button retakeBtn = new Button("↻ 重测上一回合");
+        row2.getChildren().addAll(maxMovementsLabel, maxMovementsField, maxEpisodesLabel, maxEpisodesField, applyBtn);
+
+        // 第三行：快捷按钮
+        HBox row3 = new HBox(8);
+        row3.setAlignment(Pos.CENTER_LEFT);
+
+        Button retakeBtn = new Button("↻ 重测");
         retakeBtn.setStyle("-fx-font-size: 11px; -fx-background-color: #d35400; " +
                          "-fx-text-fill: white; -fx-background-radius: 3; -fx-padding: 4 12; -fx-cursor: hand;");
-        retakeBtn.setOnAction(e -> retakeCurrentEpisode());
+        retakeBtn.setOnAction(e -> retakeLastEpisode());
 
         Button resetEpisodeBtn = new Button("⟲ 重置回合");
         resetEpisodeBtn.setStyle("-fx-font-size: 11px; -fx-background-color: #7f8c8d; " +
@@ -674,9 +667,9 @@ public class LeaderApplication extends Application {
                               "-fx-text-fill: white; -fx-background-radius: 3; -fx-padding: 4 12; -fx-cursor: hand;");
         nextSubjectBtn.setOnAction(e -> nextSubject());
 
-        row3.getChildren().addAll(applyBtn, retakeBtn, resetEpisodeBtn, nextSubjectBtn);
+        row3.getChildren().addAll(retakeBtn, resetEpisodeBtn, nextSubjectBtn);
 
-        Label helpText = new Label("💡 录制完成后自动递增。重测功能回退到上一回合并增加重测计数。快捷键: Enter=启停录制");
+        Label helpText = new Label("💡 录制完成后自动递增。重测会回退到上一回合并覆盖原有数据。快捷键: Enter=启停录制");
         helpText.setStyle("-fx-font-size: 10px; -fx-text-fill: #7f8c8d; -fx-font-style: italic;");
 
         panel.getChildren().addAll(sectionTitle, row1, row2, row3, helpText);
@@ -1134,12 +1127,11 @@ public class LeaderApplication extends Application {
 
         // 获取当前实验数据
         String episodeId = "e" + currentEpisodeNumber;
-        String retakeId = String.format("r%04d", currentRetakeNumber);
 
-        // 构造包含视频参数和实验数据的payload: batchId|width|height|fps|subjectId|movementId|episodeId|retakeId
-        String payload = String.format("%s|%d|%d|%d|%s|%s|%s|%s",
+        // 构造包含视频参数和实验数据的payload: batchId|width|height|fps|subjectId|movementId|episodeId
+        String payload = String.format("%s|%d|%d|%d|%s|%s|%s",
             currentBatchId, currentWidth, currentHeight, currentFps,
-            currentSubjectId, currentMovementId, episodeId, retakeId);
+            currentSubjectId, currentMovementId, episodeId);
 
         // 广播批次ID、视频参数和实验数据给所有客户端
         syncLeader.broadcastRpc(SyncConstants.METHOD_START_RECORDING, payload);
@@ -1149,15 +1141,15 @@ public class LeaderApplication extends Application {
         recordToggleBtn.setText("⏹️ 停止录制");
         recordToggleBtn.setStyle("-fx-base: #f44336;"); // 红色背景
 
-        String retakeInfo = currentRetakeNumber == 0 ? "" : String.format(" [重测%d]", currentRetakeNumber);
+        String retakeInfo = currentRetakeNumber > 0 ? String.format(" [重测%d]", currentRetakeNumber) : "";
         statusLabel.setText(String.format("状态: 录制中 🔴 - %s %s %s%s",
             currentSubjectId, currentMovementId, episodeId, retakeInfo));
         updateStatusBarSuccess(String.format(
-            "开始录制 - 测试者:%s 动作:%s 回合:%s 重测:%s | %dx%d @ %dfps",
-            currentSubjectId, currentMovementId, episodeId, retakeId,
+            "开始录制 - 测试者:%s 动作:%s 回合:%s%s | %dx%d @ %dfps",
+            currentSubjectId, currentMovementId, episodeId, retakeInfo,
             currentWidth, currentHeight, currentFps));
-        logger.info("📹 广播开始录制命令 - 测试者:{}, 动作:{}, 回合:{}, 重测:{}, 批次ID:{}, 参数:{}x{} @ {}fps",
-            currentSubjectId, currentMovementId, episodeId, retakeId,
+        logger.info("📹 广播开始录制命令 - 测试者:{}, 动作:{}, 回合:{}{}, 批次ID:{}, 参数:{}x{} @ {}fps",
+            currentSubjectId, currentMovementId, episodeId, retakeInfo,
             currentBatchId, currentWidth, currentHeight, currentFps);
     }
 
@@ -1171,18 +1163,15 @@ public class LeaderApplication extends Application {
             recordToggleBtn.setStyle("-fx-base: #4CAF50;"); // 绿色背景
 
             statusLabel.setText("状态: 系统就绪 ✅");
-            updateStatusBarSuccess("录制已停止 - 批次ID: " + currentBatchId);
-            logger.info("⏹️ 广播停止录制命令 - 批次ID: {}", currentBatchId);
+
+            String retakeInfo = currentRetakeNumber > 0 ? String.format("（重测%d完成）", currentRetakeNumber) : "";
+            updateStatusBarSuccess("录制已停止" + retakeInfo + " - 批次ID: " + currentBatchId);
+            logger.info("⏹️ 广播停止录制命令 - 批次ID: {}{}", currentBatchId, retakeInfo);
             currentBatchId = null;
 
-            // 如果是重测，提示完成重测
+            // 重测完成后，重置重测计数
             if (currentRetakeNumber > 0) {
-                updateStatusBarSuccess(String.format("重测%d完成", currentRetakeNumber));
-                logger.info("重测{}完成", currentRetakeNumber);
-                // 重测完成后，重置重测号
                 currentRetakeNumber = 0;
-                retakeLabel.setText(String.format("r%04d", currentRetakeNumber));
-                return; // 重测不递增回合号
             }
 
             // 正常录制完成，自动递增回合号，并检查是否需要切换
@@ -1203,33 +1192,30 @@ public class LeaderApplication extends Application {
     }
 
     /**
-     * 重测上一回合（录制完成后回合号会自动递增，此功能用于回退并重测）
+     * 重测上一回合（录制完成后回合号会自动递增，此功能用于回退并重测，覆盖原有数据）
      */
-    private void retakeCurrentEpisode() {
+    private void retakeLastEpisode() {
         if (isRecording) {
             showWarning("请先停止当前录制");
             return;
         }
 
-        // 检查是否有可重测的回合
-        if (currentEpisodeNumber <= 1 && currentRetakeNumber == 0) {
+        // 检查是否有可重测的回合（回合号必须大于1，因为完成后已经递增了）
+        if (currentEpisodeNumber <= 1) {
             showWarning("当前没有已完成的回合可以重测");
             return;
         }
 
-        // 如果当前重测号为0，说明上一次是正常录制，回合号已经递增了，需要回退
-        if (currentRetakeNumber == 0) {
-            currentEpisodeNumber--;
-            episodeLabel.setText("e" + currentEpisodeNumber);
-        }
+        // 回退到上一回合（因为录制完成后已经自动递增了）
+        currentEpisodeNumber--;
+        episodeLabel.setText("e" + currentEpisodeNumber);
 
-        // 递增重测号
+        // 递增重测计数（仅用于日志，不影响路径）
         currentRetakeNumber++;
-        retakeLabel.setText(String.format("r%04d", currentRetakeNumber));
 
-        updateStatusBarSuccess(String.format("准备重测回合 e%d（第%d次重测）",
+        updateStatusBarSuccess(String.format("准备重测回合 e%d（第%d次重测，将覆盖原有数据）",
             currentEpisodeNumber, currentRetakeNumber));
-        logger.info("准备重测回合 e{}，重测号: r{:04d}", currentEpisodeNumber, currentRetakeNumber);
+        logger.info("准备重测回合 e{}（第{}次重测，覆盖模式）", currentEpisodeNumber, currentRetakeNumber);
     }
 
     private void nextMovement() {
@@ -1347,9 +1333,8 @@ public class LeaderApplication extends Application {
         currentEpisodeNumber = 1;
         currentRetakeNumber = 0;
         episodeLabel.setText("e" + currentEpisodeNumber);
-        retakeLabel.setText(String.format("r%04d", currentRetakeNumber));
-        updateStatusBarSuccess("回合号和重测号已重置");
-        logger.info("回合号已重置为 e1, 重测号已重置为 r0000");
+        updateStatusBarSuccess("回合号已重置");
+        logger.info("回合号已重置为 e1");
     }
 
     private void nextSubject() {
@@ -1465,11 +1450,10 @@ public class LeaderApplication extends Application {
         subjectIdField.setText(nextSubjectId);
         currentSubjectId = nextSubjectId;
 
-        // 重置回合号和重测号
+        // 重置回合号和重测次数
         currentEpisodeNumber = 1;
         currentRetakeNumber = 0;
         episodeLabel.setText("e" + currentEpisodeNumber);
-        retakeLabel.setText(String.format("r%04d", currentRetakeNumber));
     }
 
     private void doPhaseAlign() {
@@ -1732,71 +1716,70 @@ public class LeaderApplication extends Application {
 
         // 获取当前实验数据
         String episodeId = "e" + currentEpisodeNumber;
-        String retakeId = String.format("r%04d", currentRetakeNumber);
 
-        // 创建分层目录：{archiveDir}/{测试者ID}/{动作ID}/{回合ID}/{重测ID}/
-        java.nio.file.Path batchDir = java.nio.file.Paths.get(
+        // 创建分层目录：{archiveDir}/{测试者ID}/{动作ID}_{回合ID}/
+        java.nio.file.Path trialDir = java.nio.file.Paths.get(
             currentArchiveDir,
             currentSubjectId,
-            currentMovementId,
-            episodeId,
-            retakeId
+            currentMovementId + "_" + episodeId
         );
 
         // 确保目录存在
-        if (!java.nio.file.Files.exists(batchDir)) {
-            java.nio.file.Files.createDirectories(batchDir);
+        if (!java.nio.file.Files.exists(trialDir)) {
+            java.nio.file.Files.createDirectories(trialDir);
         }
 
-        // 保存批次信息文件：batch_info.properties
-        java.nio.file.Path batchInfoPath = batchDir.resolve("batch_info.properties");
+        // 保存元信息文件：meta.json
+        java.nio.file.Path metaPath = trialDir.resolve("meta.json");
 
-        // 创建扩展的Properties，包含批次ID和时间戳
-        java.util.Properties batchProps = new java.util.Properties();
-        batchProps.setProperty("batch_id", currentBatchId);
-        batchProps.setProperty("subject_id", currentSubjectId);
-        batchProps.setProperty("movement_id", currentMovementId);
-        batchProps.setProperty("episode_id", episodeId);
-        batchProps.setProperty("retake_id", retakeId);
-        batchProps.setProperty("name", name);
-        batchProps.setProperty("age", String.valueOf(age));
-        batchProps.setProperty("gender", gender);
-        batchProps.setProperty("weight", String.valueOf(weight));
-        batchProps.setProperty("height", String.valueOf(height));
-        batchProps.setProperty("bmi", String.format("%.2f", currentSubjectInfo.getBmi()));
-        batchProps.setProperty("bmi_category", currentSubjectInfo.getBMICategory());
-        batchProps.setProperty("record_time", currentSubjectInfo.getRecordTime());
+        // 创建JSON格式的元信息
+        String metaJson = String.format(
+            "{\n" +
+            "  \"batch_id\": \"%s\",\n" +
+            "  \"subject_id\": \"%s\",\n" +
+            "  \"movement_id\": \"%s\",\n" +
+            "  \"episode_id\": \"%s\",\n" +
+            "  \"record_time\": \"%s\",\n" +
+            "  \"fps\": %d,\n" +
+            "  \"resolution\": \"%dx%d\",\n" +
+            "  \"subject\": {\n" +
+            "    \"name\": \"%s\",\n" +
+            "    \"age\": %d,\n" +
+            "    \"gender\": \"%s\",\n" +
+            "    \"weight\": %.1f,\n" +
+            "    \"height\": %.1f,\n" +
+            "    \"bmi\": %.2f\n" +
+            "  }\n" +
+            "}",
+            currentBatchId, currentSubjectId, currentMovementId, episodeId,
+            currentSubjectInfo.getRecordTime(),
+            currentFps, currentWidth, currentHeight,
+            name, age, gender, weight, height, currentSubjectInfo.getBmi()
+        );
 
-        try (java.io.FileOutputStream fos = new java.io.FileOutputStream(batchInfoPath.toFile())) {
-            batchProps.store(fos, String.format("Batch Info - %s %s %s %s",
-                                               currentSubjectId, currentMovementId, episodeId, retakeId));
-        }
+        java.nio.file.Files.writeString(metaPath, metaJson);
 
         // 同时保存CSV格式用于批量数据分析
         java.nio.file.Path csvPath = java.nio.file.Paths.get(
             currentArchiveDir,
-            "subjects_summary.csv"
+            "dataset.csv"
         );
 
         boolean csvExists = java.nio.file.Files.exists(csvPath);
         try (java.io.FileWriter fw = new java.io.FileWriter(csvPath.toFile(), true)) {
             // 如果是新文件，先写入表头
             if (!csvExists) {
-                fw.write(SubjectInfo.getCSVHeader() + ",批次ID,测试者ID,动作ID,回合号,重测号\n");
+                fw.write("subject_id,movement_id,episode_id,batch_id,record_time,name,age,gender,weight,height,bmi\n");
             }
             // 写入数据
-            fw.write(String.format("%s,%s,%s,%s,%s,%s\n",
-                currentSubjectInfo.toCSV(),
-                currentBatchId,
-                currentSubjectId,
-                currentMovementId,
-                episodeId,
-                retakeId
+            fw.write(String.format("%s,%s,%s,%s,%s,%s,%d,%s,%.1f,%.1f,%.2f\n",
+                currentSubjectId, currentMovementId, episodeId,
+                currentBatchId, currentSubjectInfo.getRecordTime(),
+                name, age, gender, weight, height, currentSubjectInfo.getBmi()
             ));
         }
 
-        logger.info("✅ 测试者信息已关联到批次: {} - {} -> {}",
-                   currentBatchId, currentSubjectInfo, batchInfoPath);
+        logger.info("✅ 元信息已保存: {}", metaPath);
     }
 
     /**

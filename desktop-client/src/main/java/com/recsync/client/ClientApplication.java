@@ -624,23 +624,11 @@ public class ClientApplication extends Application {
 
         switch (method) {
             case SyncConstants.METHOD_START_RECORDING:
-                // payload 格式: batchId|width|height|fps|subjectId|movementId|episodeId|retakeId
+                // payload 格式: batchId|width|height|fps|subjectId|movementId|episodeId
                 try {
                     String[] parts = payload.split("\\|");
-                    if (parts.length >= 8) {
-                        // 新格式：包含受试者、动作、回合、重测信息
-                        String batchId = parts[0];
-                        int width = Integer.parseInt(parts[1]);
-                        int height = Integer.parseInt(parts[2]);
-                        int fps = Integer.parseInt(parts[3]);
-                        String subjectId = parts[4];
-                        String movementId = parts[5];
-                        String episodeId = parts[6];
-                        String retakeId = parts[7];
-                        Platform.runLater(() -> startRecording(batchId, width, height, fps,
-                                                               subjectId, movementId, episodeId, retakeId));
-                    } else if (parts.length >= 7) {
-                        // 兼容格式：无重测信息
+                    if (parts.length >= 7) {
+                        // 新格式：包含受试者、动作、回合信息（无重测，覆盖模式）
                         String batchId = parts[0];
                         int width = Integer.parseInt(parts[1]);
                         int height = Integer.parseInt(parts[2]);
@@ -649,7 +637,7 @@ public class ClientApplication extends Application {
                         String movementId = parts[5];
                         String episodeId = parts[6];
                         Platform.runLater(() -> startRecording(batchId, width, height, fps,
-                                                               subjectId, movementId, episodeId, "r0000"));
+                                                               subjectId, movementId, episodeId));
                     } else if (parts.length == 4) {
                         // 旧格式：仅视频参数
                         String batchId = parts[0];
@@ -657,14 +645,14 @@ public class ClientApplication extends Application {
                         int height = Integer.parseInt(parts[2]);
                         int fps = Integer.parseInt(parts[3]);
                         Platform.runLater(() -> startRecording(batchId, width, height, fps,
-                                                               "", "", "", "r0000"));
+                                                               "", "", ""));
                     } else {
                         // 兼容最旧格式（只有batchId）
                         Platform.runLater(() -> startRecording(payload,
                             SyncConstants.DEFAULT_VIDEO_WIDTH,
                             SyncConstants.DEFAULT_VIDEO_HEIGHT,
                             SyncConstants.DEFAULT_VIDEO_FPS,
-                            "", "", "", "r0000"));
+                            "", "", ""));
                     }
                 } catch (Exception e) {
                     logger.error("解析录制参数失败: {}", payload, e);
@@ -714,7 +702,14 @@ public class ClientApplication extends Application {
     }
 
     private void startRecording(String batchId, int width, int height, int fps,
-                               String subjectId, String movementId, String episodeId, String retakeId) {
+                               String subjectId, String movementId, String episodeId) {
+        // 检查摄像头是否已初始化
+        if (cameraController == null) {
+            logger.error("摄像头未初始化，无法开始录制");
+            showError("录制失败", "摄像头未初始化，请先选择摄像头");
+            return;
+        }
+
         if (cameraController.isRecording()) {
             logger.warn("已经在录制中");
             return;
@@ -722,6 +717,20 @@ public class ClientApplication extends Application {
 
         new Thread(() -> {
             try {
+                // 等待摄像头启动完成（最多等待5秒）
+                int waitCount = 0;
+                while (!cameraController.isRunning() && waitCount < 50) {
+                    logger.info("等待摄像头启动... ({}/50)", waitCount + 1);
+                    Thread.sleep(100);
+                    waitCount++;
+                }
+
+                if (!cameraController.isRunning()) {
+                    logger.error("摄像头启动超时，无法开始录制");
+                    Platform.runLater(() -> showError("录制失败", "摄像头启动超时，请检查摄像头状态"));
+                    return;
+                }
+
                 // 检查视频参数是否改变
                 boolean paramsChanged = (width != currentVideoWidth ||
                                         height != currentVideoHeight ||
@@ -770,26 +779,15 @@ public class ClientApplication extends Application {
                 // 生成时间戳
                 String timestamp = new SimpleDateFormat("yyyyMMddHHmmss").format(new Date());
 
-                // 文件命名格式:
-                // 正常录制: {deviceName}_{subjectId}_{movementId}_{timestamp}_{episodeId}.mp4
-                // 重测录制: {deviceName}_{subjectId}_{movementId}_{timestamp}_{episodeId}_retake{N}.mp4
-                // 例如: front_s01_m01_20260114150230_e1.mp4（正式）
-                // 例如: front_s01_m01_20260114150435_e1_retake1.mp4（第1次重测）
+                // 文件命名格式: {subjectId}_{movementId}_{episodeId}_{deviceName}.mp4
+                // 例如: s01_m01_e1_front.mp4
+                // FileReceiveServer会解析并存放到: {archive}/{subject}/{action}_{episode}/{device}.mp4
                 String filename;
                 if (!subjectId.isEmpty() && !movementId.isEmpty() && !episodeId.isEmpty()) {
-                    // 解析重测号（r0000 -> 0, r0001 -> 1, r0002 -> 2）
-                    int retakeNumber = Integer.parseInt(retakeId.substring(1));
-                    if (retakeNumber == 0) {
-                        // 正常录制：不添加重测标记
-                        filename = String.format("%s_%s_%s_%s_%s.mp4",
-                            deviceName, subjectId, movementId, timestamp, episodeId);
-                    } else {
-                        // 重测：添加retake标记
-                        filename = String.format("%s_%s_%s_%s_%s_retake%d.mp4",
-                            deviceName, subjectId, movementId, timestamp, episodeId, retakeNumber);
-                    }
+                    filename = String.format("%s_%s_%s_%s.mp4",
+                        subjectId, movementId, episodeId, deviceName);
                 } else {
-                    // 回退到旧格式
+                    // 回退到旧格式（包含时间戳）
                     filename = String.format("%s_%s_batch%s.mp4",
                         deviceName, timestamp, batchId.replace(":", "").replace("-", ""));
                 }
@@ -800,15 +798,20 @@ public class ClientApplication extends Application {
 
                 currentRecordingPath = recSyncDir.resolve(filename).toString();
 
+                // 如果文件存在，先删除（覆盖模式）
+                Path targetPath = Paths.get(currentRecordingPath);
+                if (Files.exists(targetPath)) {
+                    Files.delete(targetPath);
+                    logger.info("覆盖模式：已删除旧文件 {}", currentRecordingPath);
+                }
+
                 cameraController.startRecording(currentRecordingPath);
 
                 String finalFilename = filename;
-                boolean isRetake = !retakeId.equals("r0000");
                 Platform.runLater(() -> {
-                    String retakeInfo = isRetake ? String.format(" [重测%d]", Integer.parseInt(retakeId.substring(1))) : "";
                     String displayInfo = !episodeId.isEmpty() ?
-                        String.format("🔴 录制中 - %s (受试者:%s 动作:%s 回合:%s%s)",
-                            finalFilename, subjectId, movementId, episodeId, retakeInfo) :
+                        String.format("🔴 录制中 - %s (受试者:%s 动作:%s 回合:%s)",
+                            finalFilename, subjectId, movementId, episodeId) :
                         String.format("🔴 录制中 - %s (%dx%d @ %dfps)",
                             finalFilename, width, height, fps);
 
@@ -816,14 +819,14 @@ public class ClientApplication extends Application {
                     recordingStatusLabel.setStyle("-fx-font-size: 12px; -fx-text-fill: #e74c3c; -fx-font-weight: bold;");
 
                     String statusMsg = !episodeId.isEmpty() ?
-                        String.format("开始录制 - 受试者:%s 动作:%s 回合:%s %s",
-                            subjectId, movementId, episodeId, retakeId) :
+                        String.format("开始录制 - 受试者:%s 动作:%s 回合:%s",
+                            subjectId, movementId, episodeId) :
                         String.format("开始录制 - 批次: %s | %dx%d @ %dfps", batchId, width, height, fps);
                     updateStatusBar(statusMsg);
                 });
 
-                logger.info("🎬 开始录制: {} (参数: {}x{} @ {}fps, 受试者:{}, 动作:{}, 回合:{}, 重测:{})",
-                    currentRecordingPath, width, height, fps, subjectId, movementId, episodeId, retakeId);
+                logger.info("🎬 开始录制: {} (参数: {}x{} @ {}fps, 受试者:{}, 动作:{}, 回合:{})",
+                    currentRecordingPath, width, height, fps, subjectId, movementId, episodeId);
 
             } catch (Exception e) {
                 logger.error("开始录制失败", e);
@@ -835,6 +838,11 @@ public class ClientApplication extends Application {
     }
 
     private void stopRecording() {
+        if (cameraController == null) {
+            logger.warn("摄像头未初始化");
+            return;
+        }
+
         if (!cameraController.isRecording()) {
             logger.warn("当前未在录制");
             return;
