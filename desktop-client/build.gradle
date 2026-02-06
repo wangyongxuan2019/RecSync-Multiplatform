@@ -12,22 +12,25 @@ javafx {
 dependencies {
     implementation project(':recsync-core')
 
-    // JavaCV for camera with platform-specific native libraries
+    // JavaCV - Windows 平台专用配置
     def javacvVersion = '1.5.10'
-    def osName = System.getProperty('os.name').toLowerCase()
-    def classifier = osName.contains('windows') ? 'windows-x86_64' :
-                    (osName.contains('mac') ? 'macosx-x86_64' : 'linux-x86_64')
 
+    // 核心库
     implementation "org.bytedeco:javacpp:${javacvVersion}"
-    implementation "org.bytedeco:javacpp:${javacvVersion}:${classifier}"
+    implementation "org.bytedeco:javacpp:${javacvVersion}:windows-x86_64"
     implementation "org.bytedeco:javacv:${javacvVersion}"
-    implementation "org.bytedeco:opencv:4.7.0-${javacvVersion}"
-    implementation "org.bytedeco:opencv:4.7.0-${javacvVersion}:${classifier}"
-    implementation "org.bytedeco:ffmpeg:6.0-${javacvVersion}"
-    implementation "org.bytedeco:ffmpeg:6.0-${javacvVersion}:${classifier}"
-    implementation "org.bytedeco:openblas:0.3.23-${javacvVersion}"
-    implementation "org.bytedeco:openblas:0.3.23-${javacvVersion}:${classifier}"
-    implementation "org.bytedeco:javacv-platform:${javacvVersion}"  // 保留以确保录制功能完整
+
+    // OpenCV - 视频采集
+    implementation "org.bytedeco:opencv:4.9.0-${javacvVersion}"
+    implementation "org.bytedeco:opencv:4.9.0-${javacvVersion}:windows-x86_64"
+
+    // FFmpeg - 视频编码
+    implementation "org.bytedeco:ffmpeg:6.1.1-${javacvVersion}"
+    implementation "org.bytedeco:ffmpeg:6.1.1-${javacvVersion}:windows-x86_64"
+
+    // OpenBLAS - OpenCV 依赖
+    implementation "org.bytedeco:openblas:0.3.26-${javacvVersion}"
+    implementation "org.bytedeco:openblas:0.3.26-${javacvVersion}:windows-x86_64"
 
     implementation 'org.controlsfx:controlsfx:11.2.0'
 }
@@ -149,16 +152,32 @@ task flattenNativeLibs {
     }
 }
 
-// 确保jlink之后执行
-tasks.named('jlink').configure {
-    finalizedBy flattenNativeLibs
+// 清理重复的原生库（只保留bin根目录下的）
+task cleanupNativeLibs {
+    dependsOn flattenNativeLibs
+    doLast {
+        def binDir = file("${buildDir}/image/bin")
+        // 删除 bin 下的子目录（这些是解压后的原生库目录）
+        binDir.listFiles()?.each { f ->
+            if (f.isDirectory() && (f.name.contains('org') || f.name.contains('native'))) {
+                println "Removing duplicate native lib directory: ${f.name}"
+                f.deleteDir()
+            }
+        }
+        println "Cleaned up duplicate native libraries"
+    }
 }
 
-// 确保jpackage相关任务依赖于flattenNativeLibs
+// 确保jlink之后执行清理
+tasks.named('jlink').configure {
+    finalizedBy cleanupNativeLibs
+}
+
+// 确保jpackage相关任务依赖于cleanupNativeLibs
 tasks.withType(org.beryx.jlink.JPackageImageTask).configureEach {
-    dependsOn flattenNativeLibs
+    dependsOn cleanupNativeLibs
 }
 
 tasks.withType(org.beryx.jlink.JPackageTask).configureEach {
-    dependsOn flattenNativeLibs
+    dependsOn cleanupNativeLibs
 }

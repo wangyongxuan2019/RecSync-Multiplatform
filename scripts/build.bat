@@ -1,5 +1,9 @@
 @echo off
 chcp 65001 >nul 2>&1
+
+:: 切换到项目根目录
+cd /d "%~dp0.."
+
 cls
 echo ========================================
 echo RecSync Quick Package Tool
@@ -28,14 +32,14 @@ set /p choice="Enter option (1-4 or 0): "
 if "%choice%"=="1" (
     echo.
     echo Starting portable version packaging...
-    call build-all-portable.bat
+    call scripts\build-all-portable.bat
     goto end
 )
 
 if "%choice%"=="2" (
     echo.
     echo Starting installer version packaging...
-    call build-all-installer.bat
+    call scripts\build-all-installer.bat
     goto end
 )
 

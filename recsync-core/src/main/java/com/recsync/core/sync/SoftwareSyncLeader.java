@@ -25,6 +25,9 @@ public class SoftwareSyncLeader extends SoftwareSyncBase {
         this.sntp = new SimpleNetworkTimeProtocol(this);
         this.staleClientChecker = Executors.newScheduledThreadPool(1);
 
+        // 添加探测处理器（用于服务发现）
+        addProbeHandler();
+
         // 添加心跳处理器
         addHeartbeatHandler();
 
@@ -33,6 +36,17 @@ public class SoftwareSyncLeader extends SoftwareSyncBase {
 
         startStaleClientChecker();
         logger.info("✅ SoftwareSyncLeader已启动");
+    }
+
+    /**
+     * 添加探测处理器 - 用于Client发现Leader
+     */
+    private void addProbeHandler() {
+        rpcMap.put(SyncConstants.METHOD_PROBE, (method, payload, fromAddress) -> {
+            logger.debug("收到探测请求 from {}", fromAddress.getHostAddress());
+            // 回复探测响应
+            sendRpc(SyncConstants.METHOD_PROBE, "PONG", fromAddress);
+        });
     }
 
     /**

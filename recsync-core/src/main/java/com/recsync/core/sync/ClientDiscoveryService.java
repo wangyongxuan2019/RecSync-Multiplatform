@@ -10,19 +10,25 @@ import java.io.BufferedReader;
 import java.io.IOException;
 import java.io.InputStreamReader;
 import java.net.*;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicBoolean;
 
 /**
  * Client端服务发现 - 自动发现Leader
- * 支持三种发现方式：
+ * 支持多种发现方式（并行执行）：
  * 1. mDNS发现（局域网模式）
- * 2. UDP广播发现（局域网模式）
- * 3. 网关发现（热点模式 - Leader作为热点时，Leader就是网关）
+ * 2. UDP广播监听（局域网模式）
+ * 3. 子网扫描（主动探测局域网内的Leader）
+ * 4. 网关发现（热点模式）
  */
 public class ClientDiscoveryService {
     private static final Logger logger = LoggerFactory.getLogger(ClientDiscoveryService.class);
-    private static final int DISCOVERY_TIMEOUT_MS = 8000;  // 增加超时时间以支持更多发现方式
+    private static final int DISCOVERY_TIMEOUT_MS = 10000;  // 10秒超时
 
     // 常见热点网关地址
     private static final String[] HOTSPOT_GATEWAY_IPS = {
@@ -33,10 +39,14 @@ public class ClientDiscoveryService {
 
     private JmDNS jmdns;
     private CompletableFuture<LeaderInfo> discoveryFuture;
-    private String manualLeaderIP = null;  // 手动设置的Leader IP
+    private String manualLeaderIP = null;
+    private ExecutorService executorService;
+    private AtomicBoolean found = new AtomicBoolean(false);
 
     public CompletableFuture<LeaderInfo> discoverLeader() {
         discoveryFuture = new CompletableFuture<>();
+        found.set(false);
+        executorService = Executors.newFixedThreadPool(4);
 
         // 如果设置了手动IP，直接使用
         if (manualLeaderIP != null && !manualLeaderIP.isEmpty()) {
@@ -44,54 +54,34 @@ public class ClientDiscoveryService {
             return tryConnectToLeader(manualLeaderIP, "手动设置");
         }
 
-        // 方法1: mDNS发现
-        startMDNSDiscovery();
+        logger.info("开始自动发现Leader...");
 
-        // 方法2: UDP广播发现（1秒后启动）
-        CompletableFuture.runAsync(() -> {
-            try {
-                Thread.sleep(1000);
-                if (!discoveryFuture.isDone()) {
-                    startBroadcastDiscovery();
-                }
-            } catch (InterruptedException e) {
-                logger.error("广播发现启动失败", e);
-            }
-        });
+        // 并行启动所有发现方式
+        executorService.submit(this::startMDNSDiscovery);
+        executorService.submit(this::startBroadcastDiscovery);
+        executorService.submit(this::startSubnetScan);
+        executorService.submit(this::startGatewayDiscovery);
 
-        // 方法3: 网关发现（热点模式，2秒后启动）
-        CompletableFuture.runAsync(() -> {
-            try {
-                Thread.sleep(2000);
-                if (!discoveryFuture.isDone()) {
-                    startGatewayDiscovery();
-                }
-            } catch (InterruptedException e) {
-                logger.error("网关发现启动失败", e);
-            }
-        });
-
-        // 设置超时
-        discoveryFuture.orTimeout(DISCOVERY_TIMEOUT_MS, TimeUnit.MILLISECONDS)
-                .exceptionally(ex -> {
-                    logger.warn("Leader发现超时，请检查网络连接或手动配置IP");
-                    return null;
+        // 设置超时 - 使用 completeOnTimeout 避免抛出异常
+        return discoveryFuture
+                .completeOnTimeout(null, DISCOVERY_TIMEOUT_MS, TimeUnit.MILLISECONDS)
+                .whenComplete((result, ex) -> {
+                    if (result == null && ex == null) {
+                        logger.warn("Leader发现超时，请检查网络连接或手动配置IP");
+                    }
+                    // 清理资源
+                    stop();
                 });
-
-        return discoveryFuture;
     }
 
     /**
-     * 设置手动Leader IP（用于无法自动发现的情况）
+     * 设置手动Leader IP
      */
     public void setManualLeaderIP(String ip) {
         this.manualLeaderIP = ip;
         logger.info("已设置手动Leader IP: {}", ip);
     }
 
-    /**
-     * 获取手动设置的Leader IP
-     */
     public String getManualLeaderIP() {
         return manualLeaderIP;
     }
@@ -104,7 +94,6 @@ public class ClientDiscoveryService {
 
         CompletableFuture.runAsync(() -> {
             try {
-                // 尝试连接到Leader的RPC端口验证是否可达
                 Socket testSocket = new Socket();
                 testSocket.connect(new InetSocketAddress(ip, SyncConstants.RPC_PORT), 2000);
                 testSocket.close();
@@ -122,67 +111,116 @@ public class ClientDiscoveryService {
         return future;
     }
 
+    /**
+     * 快速检测指定IP是否为Leader（使用UDP RPC探测）
+     * 发送 METHOD_PROBE 请求，等待 Leader 响应
+     */
+    private boolean quickProbe(String ip, int timeoutMs) {
+        if (found.get()) return false;
+
+        try (DatagramSocket socket = new DatagramSocket()) {
+            socket.setSoTimeout(timeoutMs);
+
+            // 构造 RPC 探测消息: [4字节 method ID] + [payload]
+            byte[] payload = "PING".getBytes();
+            byte[] sendData = new byte[4 + payload.length];
+            // METHOD_PROBE = 0
+            sendData[0] = 0;
+            sendData[1] = 0;
+            sendData[2] = 0;
+            sendData[3] = 0;
+            System.arraycopy(payload, 0, sendData, 4, payload.length);
+
+            InetAddress address = InetAddress.getByName(ip);
+            DatagramPacket sendPacket = new DatagramPacket(sendData, sendData.length,
+                    address, SyncConstants.RPC_PORT);
+            socket.send(sendPacket);
+
+            // 等待响应
+            byte[] receiveData = new byte[256];
+            DatagramPacket receivePacket = new DatagramPacket(receiveData, receiveData.length);
+            socket.receive(receivePacket);
+
+            // 验证响应是否来自 Leader（检查 method ID 为 0）
+            if (receivePacket.getLength() >= 4) {
+                int method = java.nio.ByteBuffer.wrap(receivePacket.getData()).getInt();
+                if (method == SyncConstants.METHOD_PROBE) {
+                    return true;
+                }
+            }
+            return false;
+        } catch (IOException e) {
+            return false;
+        }
+    }
+
+    /**
+     * 完成发现
+     */
+    private synchronized void completeDiscovery(String ip, String method) {
+        if (found.compareAndSet(false, true)) {
+            LeaderInfo info = new LeaderInfo(ip, SyncConstants.RPC_PORT,
+                    SyncConstants.FILE_TRANSFER_PORT, method);
+            logger.info("✅ 通过{}发现Leader: {}", method, ip);
+            discoveryFuture.complete(info);
+        }
+    }
+
     private void startMDNSDiscovery() {
+        if (found.get()) return;
+
         try {
             jmdns = JmDNS.create();
 
             jmdns.addServiceListener(SyncConstants.MDNS_SERVICE_TYPE, new ServiceListener() {
                 @Override
                 public void serviceAdded(ServiceEvent event) {
-                    logger.debug("检测到服务: {}", event.getName());
+                    logger.debug("检测到mDNS服务: {}", event.getName());
                     jmdns.requestServiceInfo(event.getType(), event.getName());
                 }
 
                 @Override
                 public void serviceResolved(ServiceEvent event) {
-                    logger.info("✅ 通过mDNS发现Leader");
+                    if (found.get()) return;
 
                     InetAddress[] addresses = event.getInfo().getInetAddresses();
                     if (addresses.length > 0) {
                         String ip = addresses[0].getHostAddress();
-                        int rpcPort = event.getInfo().getPort();
-                        int transferPort = Integer.parseInt(
-                                event.getInfo().getPropertyString("transfer_port")
-                        );
-
-                        LeaderInfo info = new LeaderInfo(ip, rpcPort, transferPort, "mDNS");
-                        discoveryFuture.complete(info);
-
-                        logger.info("   IP: {}, RPC端口: {}, 传输端口: {}",
-                                ip, rpcPort, transferPort);
+                        completeDiscovery(ip, "mDNS");
                     }
                 }
 
                 @Override
                 public void serviceRemoved(ServiceEvent event) {
-                    logger.info("Leader服务已移除: {}", event.getName());
+                    logger.debug("mDNS服务已移除: {}", event.getName());
                 }
             });
 
+            logger.info("mDNS发现已启动");
+
         } catch (IOException e) {
-            logger.warn("mDNS启动失败（可能在同一台机器上），将使用UDP广播发现: {}", e.getMessage());
-            // 立即启动UDP广播发现作为备选
-            CompletableFuture.runAsync(this::startBroadcastDiscovery);
+            logger.warn("mDNS启动失败: {}", e.getMessage());
         }
     }
 
     private void startBroadcastDiscovery() {
-        try (DatagramSocket socket = new DatagramSocket(SyncConstants.DISCOVERY_BROADCAST_PORT)) {
-            socket.setSoTimeout(3000);
-            // 允许地址重用，以便在同一台机器上运行
+        if (found.get()) return;
+
+        logger.info("UDP广播发现已启动，监听端口: {}", SyncConstants.DISCOVERY_BROADCAST_PORT);
+
+        try (DatagramSocket socket = new DatagramSocket(null)) {
             socket.setReuseAddress(true);
+            socket.bind(new InetSocketAddress(SyncConstants.DISCOVERY_BROADCAST_PORT));
+            socket.setSoTimeout(1000);  // 1秒超时，便于检查found状态
 
             byte[] buffer = new byte[256];
             DatagramPacket packet = new DatagramPacket(buffer, buffer.length);
 
-            logger.info("正在监听UDP广播...");
-
-            while (!discoveryFuture.isDone()) {
+            while (!found.get() && !discoveryFuture.isDone()) {
                 try {
                     socket.receive(packet);
                     String message = new String(packet.getData(), 0, packet.getLength());
 
-                    // 解析: LEADER_ANNOUNCE|IP|RPC_PORT|TRANSFER_PORT|TOKEN
                     if (message.startsWith(SyncConstants.BROADCAST_MESSAGE_PREFIX)) {
                         String[] parts = message.split("\\|");
                         if (parts.length >= 5) {
@@ -193,15 +231,7 @@ public class ClientDiscoveryService {
                             }
 
                             String ip = parts[1];
-                            int rpcPort = Integer.parseInt(parts[2]);
-                            int transferPort = Integer.parseInt(parts[3]);
-
-                            logger.info("✅ 通过UDP广播发现Leader");
-                            logger.info("   IP: {}, RPC端口: {}, 传输端口: {}",
-                                    ip, rpcPort, transferPort);
-
-                            LeaderInfo info = new LeaderInfo(ip, rpcPort, transferPort, "UDP广播");
-                            discoveryFuture.complete(info);
+                            completeDiscovery(ip, "UDP广播");
                             break;
                         }
                     }
@@ -209,71 +239,146 @@ public class ClientDiscoveryService {
                     // 继续监听
                 }
             }
-
+        } catch (BindException e) {
+            logger.warn("UDP广播端口已被占用: {}", e.getMessage());
         } catch (IOException e) {
-            logger.error("UDP广播监听失败", e);
+            logger.error("UDP广播监听失败: {}", e.getMessage());
         }
+    }
+
+    /**
+     * 子网扫描 - 主动探测局域网内的Leader
+     */
+    private void startSubnetScan() {
+        if (found.get()) return;
+
+        logger.info("子网扫描发现已启动...");
+
+        try {
+            // 获取本机IP，确定子网
+            String localIP = getLocalIP();
+            if (localIP == null) {
+                logger.warn("无法获取本机IP，跳过子网扫描");
+                return;
+            }
+
+            String subnet = localIP.substring(0, localIP.lastIndexOf('.') + 1);
+            logger.info("扫描子网: {}x", subnet);
+
+            // 优先扫描常见的 IP 地址（.1, .100, .101, .2, .10 等）
+            int[] priorityHosts = {1, 2, 100, 101, 102, 10, 11, 50, 200, 254};
+
+            // 先扫描优先 IP（常见的 DHCP 分配地址）
+            for (int host : priorityHosts) {
+                if (found.get()) return;
+                String ip = subnet + host;
+                if (!ip.equals(localIP) && quickProbe(ip, 500)) {
+                    completeDiscovery(ip, "子网扫描");
+                    return;
+                }
+            }
+
+            // 并行扫描其他 IP
+            List<CompletableFuture<Void>> futures = new ArrayList<>();
+            for (int i = 1; i <= 254; i++) {
+                if (found.get()) break;
+
+                final String ip = subnet + i;
+                if (ip.equals(localIP)) continue;
+
+                // 跳过已扫描的优先 IP
+                boolean skip = false;
+                for (int p : priorityHosts) {
+                    if (i == p) { skip = true; break; }
+                }
+                if (skip) continue;
+
+                futures.add(CompletableFuture.runAsync(() -> {
+                    if (!found.get() && quickProbe(ip, 300)) {
+                        completeDiscovery(ip, "子网扫描");
+                    }
+                }));
+
+                // 限制并发数，每批 20 个
+                if (futures.size() >= 20) {
+                    CompletableFuture.allOf(futures.toArray(new CompletableFuture[0]))
+                            .orTimeout(2, TimeUnit.SECONDS)
+                            .exceptionally(ex -> null)
+                            .join();
+                    futures.clear();
+                }
+            }
+
+            // 等待剩余的扫描完成
+            if (!futures.isEmpty()) {
+                CompletableFuture.allOf(futures.toArray(new CompletableFuture[0]))
+                        .orTimeout(2, TimeUnit.SECONDS)
+                        .exceptionally(ex -> null)
+                        .join();
+            }
+
+        } catch (Exception e) {
+            logger.error("子网扫描失败: {}", e.getMessage());
+        }
+    }
+
+    /**
+     * 获取本机IP地址
+     */
+    private String getLocalIP() {
+        try {
+            var interfaces = NetworkInterface.getNetworkInterfaces();
+            while (interfaces.hasMoreElements()) {
+                NetworkInterface iface = interfaces.nextElement();
+                if (iface.isLoopback() || !iface.isUp()) continue;
+
+                var addresses = iface.getInetAddresses();
+                while (addresses.hasMoreElements()) {
+                    InetAddress addr = addresses.nextElement();
+                    if (addr instanceof Inet4Address && !addr.isLoopbackAddress()) {
+                        String ip = addr.getHostAddress();
+                        if (ip.startsWith("192.168.") || ip.startsWith("10.") || ip.startsWith("172.")) {
+                            return ip;
+                        }
+                    }
+                }
+            }
+        } catch (SocketException e) {
+            logger.error("获取本机IP失败", e);
+        }
+        return null;
     }
 
     /**
      * 网关发现（热点模式）
-     * 当Client连接到Leader的热点时，Leader就是网关
      */
     private void startGatewayDiscovery() {
-        if (discoveryFuture.isDone()) {
-            return;
-        }
+        if (found.get()) return;
 
-        logger.info("🔥 尝试热点模式发现（检测网关）...");
+        logger.info("热点网关发现已启动...");
 
-        // 方法1：尝试获取系统默认网关
+        // 尝试系统默认网关
         String systemGateway = getSystemDefaultGateway();
-        if (systemGateway != null && !discoveryFuture.isDone()) {
-            logger.info("检测到系统网关: {}", systemGateway);
-            if (tryConnectToGateway(systemGateway)) {
+        if (systemGateway != null && !found.get()) {
+            logger.debug("检测到系统网关: {}", systemGateway);
+            if (quickProbe(systemGateway, 500)) {
+                completeDiscovery(systemGateway, "系统网关");
                 return;
             }
         }
 
-        // 方法2：尝试常见的热点网关地址
+        // 尝试常见热点网关
         for (String gatewayIP : HOTSPOT_GATEWAY_IPS) {
-            if (discoveryFuture.isDone()) {
+            if (found.get()) return;
+            if (quickProbe(gatewayIP, 300)) {
+                completeDiscovery(gatewayIP, "热点网关");
                 return;
             }
-
-            logger.debug("尝试热点网关: {}", gatewayIP);
-            if (tryConnectToGateway(gatewayIP)) {
-                return;
-            }
-        }
-
-        logger.info("热点模式发现未找到Leader");
-    }
-
-    /**
-     * 尝试连接到网关作为Leader
-     */
-    private boolean tryConnectToGateway(String gatewayIP) {
-        try {
-            // 尝试连接到网关的RPC端口
-            Socket testSocket = new Socket();
-            testSocket.connect(new InetSocketAddress(gatewayIP, SyncConstants.RPC_PORT), 1500);
-            testSocket.close();
-
-            logger.info("✅ 通过热点网关发现Leader: {}", gatewayIP);
-            LeaderInfo info = new LeaderInfo(gatewayIP, SyncConstants.RPC_PORT,
-                    SyncConstants.FILE_TRANSFER_PORT, "热点网关");
-            discoveryFuture.complete(info);
-            return true;
-
-        } catch (IOException e) {
-            logger.debug("网关 {} 不是Leader: {}", gatewayIP, e.getMessage());
-            return false;
         }
     }
 
     /**
-     * 获取系统默认网关（跨平台）
+     * 获取系统默认网关
      */
     private String getSystemDefaultGateway() {
         String os = System.getProperty("os.name").toLowerCase();
@@ -281,11 +386,10 @@ public class ClientDiscoveryService {
         try {
             ProcessBuilder pb;
             if (os.contains("win")) {
-                // Windows: 使用 route print 命令
                 pb = new ProcessBuilder("cmd", "/c", "route", "print", "0.0.0.0");
             } else {
-                // Linux/Mac: 使用 ip route 或 netstat
-                pb = new ProcessBuilder("sh", "-c", "ip route | grep default | awk '{print $3}' || netstat -rn | grep default | awk '{print $2}'");
+                pb = new ProcessBuilder("sh", "-c",
+                        "ip route | grep default | awk '{print $3}' || netstat -rn | grep default | awk '{print $2}'");
             }
 
             Process process = pb.start();
@@ -293,14 +397,11 @@ public class ClientDiscoveryService {
                 String line;
                 while ((line = reader.readLine()) != null) {
                     if (os.contains("win")) {
-                        // Windows route print 输出格式解析
-                        // 找包含 0.0.0.0 的行，提取网关地址
                         if (line.contains("0.0.0.0") && !line.trim().startsWith("0.0.0.0")) {
                             String[] parts = line.trim().split("\\s+");
                             for (String part : parts) {
                                 if (part.matches("\\d+\\.\\d+\\.\\d+\\.\\d+") &&
                                     !part.equals("0.0.0.0") && !part.equals("255.255.255.255")) {
-                                    // 验证是否为有效的局域网地址
                                     if (part.startsWith("192.168.") || part.startsWith("10.") || part.startsWith("172.")) {
                                         return part;
                                     }
@@ -308,7 +409,6 @@ public class ClientDiscoveryService {
                             }
                         }
                     } else {
-                        // Linux/Mac 输出直接是IP地址
                         String trimmed = line.trim();
                         if (trimmed.matches("\\d+\\.\\d+\\.\\d+\\.\\d+")) {
                             return trimmed;
@@ -316,22 +416,26 @@ public class ClientDiscoveryService {
                     }
                 }
             }
-
             process.waitFor();
-
         } catch (Exception e) {
             logger.debug("获取系统网关失败: {}", e.getMessage());
         }
-
         return null;
     }
 
     public void stop() {
+        found.set(true);
+
+        if (executorService != null && !executorService.isShutdown()) {
+            executorService.shutdownNow();
+            executorService = null;
+        }
         if (jmdns != null) {
             try {
                 jmdns.close();
+                jmdns = null;
             } catch (IOException e) {
-                logger.error("关闭JmDNS失败", e);
+                logger.debug("关闭JmDNS: {}", e.getMessage());
             }
         }
     }

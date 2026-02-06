@@ -22,6 +22,7 @@ public class SyncConstants {
     public static final long MIN_ROUND_TRIP_LATENCY_NS = TimeUtils.millisToNanos(1);
 
     // RPC Method IDs (0-999: System, 1000+: User)
+    public static final int METHOD_PROBE = 0;  // 探测请求/响应
     public static final int METHOD_HEARTBEAT = 1;
     public static final int METHOD_HEARTBEAT_ACK = 2;
     public static final int METHOD_OFFSET_UPDATE = 3;

@@ -1,5 +1,9 @@
 @echo off
 chcp 65001 >nul 2>&1
+
+:: 切换到项目根目录
+cd /d "%~dp0.."
+
 cls
 echo ========================================
 echo RecSync Complete Package Tool - Installer
