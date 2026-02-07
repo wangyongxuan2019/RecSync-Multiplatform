@@ -403,15 +403,14 @@ public class ClientApplication extends Application {
 
         while (running) {
             try {
-                Frame frame = cameraController.grabFrame();
-                if (frame != null && frame.image != null) {
-                    // 录制帧
-                    if (cameraController.isRecording()) {
-                        cameraController.recordFrame(frame);
-                    }
+                // 使用带时间戳的帧（软录制模式）
+                JavaCVCameraController.TimestampedFrame tsFrame = cameraController.grabTimestampedFrame();
+                if (tsFrame != null && tsFrame.frame != null && tsFrame.frame.image != null) {
+                    // 软录制：根据触发时间自动决定是否写入
+                    cameraController.processFrame(tsFrame);
 
                     // 更新预览
-                    BufferedImage bufferedImage = converter.convert(frame);
+                    BufferedImage bufferedImage = converter.convert(tsFrame.frame);
                     if (bufferedImage != null) {
                         Platform.runLater(() ->
                                 previewView.setImage(
@@ -421,7 +420,9 @@ public class ClientApplication extends Application {
                     }
                 }
 
-                Thread.sleep(33); // ~30fps
+                // 根据当前帧率计算休眠时间
+                int sleepMs = 1000 / currentVideoFps;
+                Thread.sleep(sleepMs);
             } catch (Exception e) {
                 if (running) {
                     logger.error("帧处理失败", e);
@@ -733,8 +734,8 @@ public class ClientApplication extends Application {
             return;
         }
 
-        if (cameraController.isRecording()) {
-            logger.warn("已经在录制中");
+        if (cameraController.isRecordingActive()) {
+            logger.warn("已经在录制中或等待触发");
             return;
         }
 
@@ -787,6 +788,16 @@ public class ClientApplication extends Application {
 
                     // 使用新参数重新初始化摄像头
                     cameraController = new JavaCVCameraController(width, height, fps);
+
+                    // 设置同步时钟提供者
+                    cameraController.setSyncClockSupplier(() -> {
+                        if (syncClient != null && syncClient.isSynced()) {
+                            return syncClient.getLeaderTimeNs();
+                        } else {
+                            return System.nanoTime();
+                        }
+                    });
+
                     cameraController.startCamera(selectedCameraIndex);
                     running = true;
 
@@ -828,30 +839,19 @@ public class ClientApplication extends Application {
                     logger.info("覆盖模式：已删除旧文件 {}", currentRecordingPath);
                 }
 
-                // 等待到精确的触发时间再开始录制
+                // 软录制模式：设置触发时间，由预览循环自动检测帧时间戳
                 if (triggerTimeNs > 0) {
-                    long waitTimeNs = triggerTimeNs - System.nanoTime();
-                    if (waitTimeNs > 0) {
-                        long waitTimeMs = waitTimeNs / 1_000_000;
-                        logger.info("⏱️ 等待同步触发，剩余时间: {}ms", waitTimeMs);
-                        Platform.runLater(() -> updateStatusBar(String.format("等待同步触发... (%dms)", waitTimeMs)));
+                    long waitTimeMs = (triggerTimeNs - cameraController.getSyncTimeNs()) / 1_000_000;
+                    logger.info("🎬 软录制模式: 设置触发时间, 预计{}ms后开始", waitTimeMs);
+                    Platform.runLater(() -> updateStatusBar(String.format("等待同步触发... (约%dms)", waitTimeMs)));
 
-                        // 使用更精确的等待方式
-                        if (waitTimeMs > 10) {
-                            // 先用 Thread.sleep 等待大部分时间
-                            Thread.sleep(waitTimeMs - 5);
-                        }
-                        // 最后几毫秒使用忙等待确保精确
-                        while (System.nanoTime() < triggerTimeNs) {
-                            Thread.onSpinWait();
-                        }
-                        logger.info("✅ 同步触发时刻到达，开始录制");
-                    } else {
-                        logger.warn("⚠️ 触发时间已过期 {}ms，立即开始录制", -waitTimeNs / 1_000_000);
-                    }
+                    // 使用软录制：设置触发时间，预览循环会自动检测并开始写入
+                    cameraController.prepareRecording(currentRecordingPath, triggerTimeNs);
+                } else {
+                    // 无触发时间，使用硬录制模式（立即开始）
+                    logger.info("🎬 硬录制模式: 立即开始");
+                    cameraController.startRecording(currentRecordingPath);
                 }
-
-                cameraController.startRecording(currentRecordingPath);
 
                 String finalFilename = filename;
                 Platform.runLater(() -> {
@@ -889,8 +889,8 @@ public class ClientApplication extends Application {
             return;
         }
 
-        if (!cameraController.isRecording()) {
-            logger.warn("当前未在录制");
+        if (!cameraController.isRecordingActive()) {
+            logger.warn("当前未在录制或等待录制");
             return;
         }
 
@@ -1086,7 +1086,7 @@ public class ClientApplication extends Application {
 
         try {
             if (cameraController != null) {
-                if (cameraController.isRecording()) {
+                if (cameraController.isRecordingActive()) {
                     cameraController.stopRecording();
                 }
                 cameraController.stopCamera();
@@ -1116,8 +1116,10 @@ public class ClientApplication extends Application {
         statusReporter.scheduleAtFixedRate(() -> {
             try {
                 if (syncClient != null && isConnected) {
-                    int status = getCurrentCameraStatus();
-                    String payload = deviceName + "|" + status;
+                    int cameraStatus = getCurrentCameraStatus();
+                    boolean synced = syncClient.isSynced();
+                    // payload格式: deviceName|cameraStatus|synced
+                    String payload = deviceName + "|" + cameraStatus + "|" + synced;
                     syncClient.sendRpcToLeader(SyncConstants.METHOD_CLIENT_STATUS, payload);
                 }
             } catch (Exception e) {
@@ -1145,7 +1147,8 @@ public class ClientApplication extends Application {
         if (cameraController == null || !cameraController.isRunning()) {
             return SyncConstants.CLIENT_STATUS_CAMERA_NOT_READY;
         }
-        if (cameraController.isRecording()) {
+        // 软录制模式：等待触发或正在录制都视为录制状态
+        if (cameraController.isRecordingActive()) {
             return SyncConstants.CLIENT_STATUS_RECORDING;
         }
         return SyncConstants.CLIENT_STATUS_CAMERA_READY;
@@ -1155,8 +1158,8 @@ public class ClientApplication extends Application {
      * 切换摄像头
      */
     private void switchCamera() {
-        // 检查是否正在录制
-        if (cameraController != null && cameraController.isRecording()) {
+        // 检查是否正在录制或等待触发
+        if (cameraController != null && cameraController.isRecordingActive()) {
             showWarning("请先停止录制，然后再切换摄像头");
             return;
         }
@@ -1234,6 +1237,17 @@ public class ClientApplication extends Application {
             currentVideoHeight,
             currentVideoFps
         );
+
+        // 设置同步时钟提供者（使用与Leader对齐的时钟）
+        cameraController.setSyncClockSupplier(() -> {
+            if (syncClient != null && syncClient.isSynced()) {
+                // 使用SNTP同步后的Leader时域时间
+                return syncClient.getLeaderTimeNs();
+            } else {
+                // 未连接或未同步时使用本地时钟
+                return System.nanoTime();
+            }
+        });
 
         new Thread(() -> {
             try {

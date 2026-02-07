@@ -54,17 +54,21 @@ public class SoftwareSyncLeader extends SoftwareSyncBase {
      */
     private void addHeartbeatHandler() {
         rpcMap.put(SyncConstants.METHOD_HEARTBEAT, (method, payload, fromAddress) -> {
-            try {
-                logger.info("📥 收到心跳请求: payload='{}', from={}", payload, fromAddress.getHostAddress());
+            // 记录收到心跳的时间 t2（Leader本地时间）
+            long t2 = System.nanoTime();
 
-                // 解析: clientName,clientIP,synced
+            try {
+                logger.debug("📥 收到心跳请求: payload='{}', from={}", payload, fromAddress.getHostAddress());
+
+                // 解析: clientName,clientIP,synced,t1
                 String[] parts = payload.split(",");
-                if (parts.length >= 3) {
+                if (parts.length >= 4) {
                     String clientName = parts[0];
                     String clientIP = parts[1];
                     boolean synced = Boolean.parseBoolean(parts[2]);
+                    long t1 = Long.parseLong(parts[3]);  // Client发送时间
 
-                    logger.info("   解析结果: 客户端名称='{}', 客户端IP='{}', synced={}", clientName, clientIP, synced);
+                    logger.debug("   解析结果: 客户端名称='{}', t1={}", clientName, t1);
 
                     // 检查是否是新客户端
                     boolean isNewClient = !clients.containsKey(fromAddress);
@@ -115,11 +119,44 @@ public class SoftwareSyncLeader extends SoftwareSyncBase {
                         logger.info("   客户端详细信息: 名称={}, 远程IP={}, 本地报告IP={}, 同步状态={}",
                                 clientName, fromAddress.getHostAddress(), clientIP, synced);
                     } else {
-                        logger.debug("💓 收到心跳: {} ({}), synced={}", clientName, fromAddress.getHostAddress(), synced);
+                        logger.trace("💓 收到心跳: {} ({}), synced={}", clientName, fromAddress.getHostAddress(), synced);
                     }
 
-                    // 发送心跳确认
-                    logger.debug("📤 发送心跳确认到 {}:{}", fromAddress.getHostAddress(), SyncConstants.CLIENT_RPC_PORT);
+                    // 记录发送响应的时间 t3（Leader本地时间）
+                    long t3 = System.nanoTime();
+
+                    // 发送心跳确认，附带 t1, t2, t3 用于SNTP计算
+                    String ackPayload = String.format("%d,%d,%d", t1, t2, t3);
+                    logger.trace("📤 发送心跳确认到 {}:{}, payload={}", fromAddress.getHostAddress(), SyncConstants.CLIENT_RPC_PORT, ackPayload);
+                    sendRpc(SyncConstants.METHOD_HEARTBEAT_ACK, ackPayload, fromAddress, SyncConstants.CLIENT_RPC_PORT);
+                } else if (parts.length >= 3) {
+                    // 兼容旧格式（无t1）
+                    String clientName = parts[0];
+                    String clientIP = parts[1];
+                    boolean synced = Boolean.parseBoolean(parts[2]);
+
+                    boolean isNewClient = !clients.containsKey(fromAddress);
+                    if (isNewClient && clients.size() >= SyncConstants.MAX_CLIENTS) {
+                        sendRpc(SyncConstants.METHOD_MSG_MAX_CLIENTS_REACHED,
+                                String.format("服务器已达到最大客户端数量限制(%d台)", SyncConstants.MAX_CLIENTS),
+                                fromAddress, SyncConstants.CLIENT_RPC_PORT);
+                        return;
+                    }
+
+                    boolean nameConflict = clients.entrySet().stream()
+                            .anyMatch(entry -> !entry.getKey().equals(fromAddress) && entry.getValue().name().equals(clientName));
+                    if (nameConflict) {
+                        sendRpc(SyncConstants.METHOD_MSG_NAME_CONFLICT,
+                                "设备名称 '" + clientName + "' 已被其他客户端使用",
+                                fromAddress, SyncConstants.CLIENT_RPC_PORT);
+                        return;
+                    }
+
+                    ClientInfo info = new ClientInfo(clientName, fromAddress, System.nanoTime(), synced, 0);
+                    clients.put(fromAddress, info);
+                    if (isNewClient) {
+                        logger.info("✅ 新客户端已连接(旧协议): {} ({})", clientName, fromAddress.getHostAddress());
+                    }
                     sendRpc(SyncConstants.METHOD_HEARTBEAT_ACK, "", fromAddress, SyncConstants.CLIENT_RPC_PORT);
                 } else {
                     logger.error("❌ 心跳消息格式错误: payload='{}', parts.length={}", payload, parts.length);
