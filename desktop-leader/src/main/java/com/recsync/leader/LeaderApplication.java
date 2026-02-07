@@ -1190,9 +1190,13 @@ public class LeaderApplication extends Application {
         // 获取当前实验数据
         String episodeId = "e" + currentEpisodeNumber;
 
-        // 构造包含视频参数和实验数据的payload: batchId|width|height|fps|subjectId|movementId|episodeId
-        String payload = String.format("%s|%d|%d|%d|%s|%s|%s",
-            currentBatchId, currentWidth, currentHeight, currentFps,
+        // 计算触发时间：当前时间 + 200ms（给所有客户端足够的准备时间）
+        long triggerTimeNs = System.nanoTime() + 200_000_000L;  // 200ms in nanoseconds
+
+        // 构造包含触发时间、视频参数和实验数据的payload
+        // 格式: triggerTimeNs|batchId|width|height|fps|subjectId|movementId|episodeId
+        String payload = String.format("%d|%s|%d|%d|%d|%s|%s|%s",
+            triggerTimeNs, currentBatchId, currentWidth, currentHeight, currentFps,
             currentSubjectId, currentMovementId, episodeId);
 
         // 广播批次ID、视频参数和实验数据给所有客户端

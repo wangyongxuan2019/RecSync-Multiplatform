@@ -98,6 +98,15 @@ public abstract class SoftwareSyncBase implements TimeDomainConverter {
         return System.nanoTime() - leaderFromLocalNs;
     }
 
+    /**
+     * 将Leader时域的时间戳转换为本地时域
+     * @param leaderTimeNs Leader时域的纳秒时间戳
+     * @return 本地时域的纳秒时间戳
+     */
+    public long localTimeForLeaderTimeNs(long leaderTimeNs) {
+        return leaderTimeNs + leaderFromLocalNs;
+    }
+
     public void close() {
         running = false;
 

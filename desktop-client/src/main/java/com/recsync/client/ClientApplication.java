@@ -631,11 +631,27 @@ public class ClientApplication extends Application {
 
         switch (method) {
             case SyncConstants.METHOD_START_RECORDING:
-                // payload 格式: batchId|width|height|fps|subjectId|movementId|episodeId
+                // payload 格式: triggerTimeNs|batchId|width|height|fps|subjectId|movementId|episodeId
                 try {
                     String[] parts = payload.split("\\|");
-                    if (parts.length >= 7) {
-                        // 新格式：包含受试者、动作、回合信息（无重测，覆盖模式）
+                    if (parts.length >= 8) {
+                        // 新格式：包含触发时间、受试者、动作、回合信息
+                        long triggerTimeNs = Long.parseLong(parts[0]);
+                        String batchId = parts[1];
+                        int width = Integer.parseInt(parts[2]);
+                        int height = Integer.parseInt(parts[3]);
+                        int fps = Integer.parseInt(parts[4]);
+                        String subjectId = parts[5];
+                        String movementId = parts[6];
+                        String episodeId = parts[7];
+
+                        // 将 Leader 时域的触发时间转换为本地时域
+                        long localTriggerTimeNs = syncClient.localTimeForLeaderTimeNs(triggerTimeNs);
+
+                        Platform.runLater(() -> startRecording(batchId, width, height, fps,
+                                                               subjectId, movementId, episodeId, localTriggerTimeNs));
+                    } else if (parts.length >= 7) {
+                        // 旧格式：包含受试者、动作、回合信息（无触发时间）
                         String batchId = parts[0];
                         int width = Integer.parseInt(parts[1]);
                         int height = Integer.parseInt(parts[2]);
@@ -644,7 +660,7 @@ public class ClientApplication extends Application {
                         String movementId = parts[5];
                         String episodeId = parts[6];
                         Platform.runLater(() -> startRecording(batchId, width, height, fps,
-                                                               subjectId, movementId, episodeId));
+                                                               subjectId, movementId, episodeId, 0));
                     } else if (parts.length == 4) {
                         // 旧格式：仅视频参数
                         String batchId = parts[0];
@@ -652,14 +668,14 @@ public class ClientApplication extends Application {
                         int height = Integer.parseInt(parts[2]);
                         int fps = Integer.parseInt(parts[3]);
                         Platform.runLater(() -> startRecording(batchId, width, height, fps,
-                                                               "", "", ""));
+                                                               "", "", "", 0));
                     } else {
                         // 兼容最旧格式（只有batchId）
                         Platform.runLater(() -> startRecording(payload,
                             SyncConstants.DEFAULT_VIDEO_WIDTH,
                             SyncConstants.DEFAULT_VIDEO_HEIGHT,
                             SyncConstants.DEFAULT_VIDEO_FPS,
-                            "", "", ""));
+                            "", "", "", 0));
                     }
                 } catch (Exception e) {
                     logger.error("解析录制参数失败: {}", payload, e);
@@ -709,7 +725,7 @@ public class ClientApplication extends Application {
     }
 
     private void startRecording(String batchId, int width, int height, int fps,
-                               String subjectId, String movementId, String episodeId) {
+                               String subjectId, String movementId, String episodeId, long triggerTimeNs) {
         // 检查摄像头是否已初始化
         if (cameraController == null) {
             logger.error("摄像头未初始化，无法开始录制");
@@ -810,6 +826,29 @@ public class ClientApplication extends Application {
                 if (Files.exists(targetPath)) {
                     Files.delete(targetPath);
                     logger.info("覆盖模式：已删除旧文件 {}", currentRecordingPath);
+                }
+
+                // 等待到精确的触发时间再开始录制
+                if (triggerTimeNs > 0) {
+                    long waitTimeNs = triggerTimeNs - System.nanoTime();
+                    if (waitTimeNs > 0) {
+                        long waitTimeMs = waitTimeNs / 1_000_000;
+                        logger.info("⏱️ 等待同步触发，剩余时间: {}ms", waitTimeMs);
+                        Platform.runLater(() -> updateStatusBar(String.format("等待同步触发... (%dms)", waitTimeMs)));
+
+                        // 使用更精确的等待方式
+                        if (waitTimeMs > 10) {
+                            // 先用 Thread.sleep 等待大部分时间
+                            Thread.sleep(waitTimeMs - 5);
+                        }
+                        // 最后几毫秒使用忙等待确保精确
+                        while (System.nanoTime() < triggerTimeNs) {
+                            Thread.onSpinWait();
+                        }
+                        logger.info("✅ 同步触发时刻到达，开始录制");
+                    } else {
+                        logger.warn("⚠️ 触发时间已过期 {}ms，立即开始录制", -waitTimeNs / 1_000_000);
+                    }
                 }
 
                 cameraController.startRecording(currentRecordingPath);
