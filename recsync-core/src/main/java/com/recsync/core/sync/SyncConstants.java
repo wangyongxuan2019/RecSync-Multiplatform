@@ -61,7 +61,7 @@ public class SyncConstants {
     public static final String AUTH_TOKEN = "RecSync-Secret-2024"; // 简单认证
 
     // File paths
-    public static final String DEFAULT_ARCHIVE_DIR = "RecSync-Archive";
+    public static final String DEFAULT_ARCHIVE_DIR = "DatasetOfLess\\videos";
     public static final String DEFAULT_RECORDING_DIR = "RecSync";
 
     // Video parameters
