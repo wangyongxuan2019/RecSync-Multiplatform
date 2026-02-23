@@ -276,3 +276,5 @@ $$|t_{start}^A - t_{start}^B| \leq \frac{1}{fps} + \sigma_{SNTP}$$
 
 1. Mills, D. L. (1991). Internet time synchronization: the network time protocol. IEEE Transactions on communications.
 2. RFC 4330 - Simple Network Time Protocol (SNTP) Version 4
+
+

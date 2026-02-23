@@ -47,6 +47,8 @@ public class ClientApplication extends Application {
     private TextField deviceNameField;
     private TextField manualLeaderIPField;  // 手动输入Leader IP
     private Label connectionStatusLabel;
+    private Label syncProgressLabel;         // 同步进度标签
+    private ProgressBar syncProgressBar;     // 同步进度条
     private ImageView previewView;
     private Label recordingStatusLabel;
     private ComboBox<String> cameraComboBox;  // 摄像头选择下拉框
@@ -205,7 +207,20 @@ public class ClientApplication extends Application {
         connectionStatusLabel = new Label("状态: 正在连接...");
         connectionStatusLabel.setStyle("-fx-font-size: 12px; -fx-text-fill: #7f8c8d;");
 
-        panel.getChildren().addAll(title, deviceNameBox, manualConnectBox, modeHint, connectionStatusLabel);
+        // 时钟同步进度
+        VBox syncBox = new VBox(5);
+        syncBox.setPadding(new Insets(8, 0, 0, 0));
+
+        syncProgressLabel = new Label("🕐 时钟同步: 等待连接...");
+        syncProgressLabel.setStyle("-fx-font-size: 12px; -fx-text-fill: #7f8c8d;");
+
+        syncProgressBar = new ProgressBar(0);
+        syncProgressBar.setPrefWidth(Double.MAX_VALUE);
+        syncProgressBar.setStyle("-fx-accent: #3498db;");
+
+        syncBox.getChildren().addAll(syncProgressLabel, syncProgressBar);
+
+        panel.getChildren().addAll(title, deviceNameBox, manualConnectBox, modeHint, connectionStatusLabel, syncBox);
         return panel;
     }
 
@@ -601,6 +616,39 @@ public class ClientApplication extends Application {
                         this::handleRpcCallback
                 );
 
+                // 设置同步进度监听器
+                syncClient.setSyncProgressListener(new SoftwareSyncClient.SyncProgressListener() {
+                    @Override
+                    public void onSyncProgress(int current, int total, double offsetMs) {
+                        Platform.runLater(() -> {
+                            double progress = (double) current / total;
+                            syncProgressBar.setProgress(progress);
+                            syncProgressLabel.setText(String.format("🕐 时钟同步: %d/%d (%.0f%%)",
+                                    current, total, progress * 100));
+                            syncProgressLabel.setStyle("-fx-font-size: 12px; -fx-text-fill: #3498db;");
+                        });
+                    }
+
+                    @Override
+                    public void onSyncComplete(double offsetMs, double minRttMs, double maxRttMs) {
+                        Platform.runLater(() -> {
+                            syncProgressBar.setProgress(1.0);
+                            syncProgressBar.setStyle("-fx-accent: #27ae60;");  // 绿色
+                            syncProgressLabel.setText(String.format("✅ 时钟已同步 (偏移: %.2fms, RTT: %.1f-%.1fms)",
+                                    offsetMs, minRttMs, maxRttMs));
+                            syncProgressLabel.setStyle("-fx-font-size: 12px; -fx-text-fill: #27ae60; -fx-font-weight: bold;");
+                        });
+                    }
+                });
+
+                // 更新UI显示同步开始
+                Platform.runLater(() -> {
+                    syncProgressLabel.setText("🕐 时钟同步: 开始同步...");
+                    syncProgressLabel.setStyle("-fx-font-size: 12px; -fx-text-fill: #3498db;");
+                    syncProgressBar.setProgress(0);
+                    syncProgressBar.setStyle("-fx-accent: #3498db;");
+                });
+
                 // 初始化上传客户端
                 uploadClient = new FileUploadClient(leaderIP, deviceName);
                 uploadClient.setProgressListener(createUploadProgressListener());
@@ -621,6 +669,8 @@ public class ClientApplication extends Application {
                 Platform.runLater(() -> {
                     connectionStatusLabel.setText("❌ 连接失败: " + e.getMessage());
                     connectionStatusLabel.setStyle("-fx-font-size: 12px; -fx-text-fill: #e74c3c;");
+                    syncProgressLabel.setText("🕐 时钟同步: 连接失败");
+                    syncProgressLabel.setStyle("-fx-font-size: 12px; -fx-text-fill: #e74c3c;");
                     showError("连接失败", e.getMessage());
                 });
             }
@@ -1118,8 +1168,9 @@ public class ClientApplication extends Application {
                 if (syncClient != null && isConnected) {
                     int cameraStatus = getCurrentCameraStatus();
                     boolean synced = syncClient.isSynced();
-                    // payload格式: deviceName|cameraStatus|synced
-                    String payload = deviceName + "|" + cameraStatus + "|" + synced;
+                    int syncProgress = syncClient.getSyncProgress();
+                    // payload格式: deviceName|cameraStatus|synced|syncProgress
+                    String payload = deviceName + "|" + cameraStatus + "|" + synced + "|" + syncProgress;
                     syncClient.sendRpcToLeader(SyncConstants.METHOD_CLIENT_STATUS, payload);
                 }
             } catch (Exception e) {

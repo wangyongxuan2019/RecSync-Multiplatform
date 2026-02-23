@@ -14,10 +14,12 @@ import java.util.concurrent.*;
 public class SoftwareSyncClient extends SoftwareSyncBase {
     private static final Logger logger = LoggerFactory.getLogger(SoftwareSyncClient.class);
 
-    // SNTP 同步参数
-    private static final int SYNC_SAMPLE_COUNT = 30;        // 每轮同步的样本数
-    private static final int SYNC_BEST_PERCENT = 30;        // 取最优的前30%样本
+    // SNTP 同步参数（优化后）
+    private static final int SYNC_SAMPLE_COUNT = 15;         // 每轮同步的样本数（减少以加快同步）
+    private static final int SYNC_BEST_PERCENT = 30;         // 取最优的前30%样本
     private static final long RESYNC_INTERVAL_NS = TimeUnit.MINUTES.toNanos(10);  // 每10分钟重新同步
+    private static final long SYNC_HEARTBEAT_INTERVAL_MS = 200;   // 同步阶段心跳间隔（快速）
+    private static final long NORMAL_HEARTBEAT_INTERVAL_MS = 1000; // 正常心跳间隔
 
     private final InetAddress leaderAddress;
     private final int leaderRpcPort;
@@ -29,6 +31,18 @@ public class SoftwareSyncClient extends SoftwareSyncBase {
     private final ConcurrentLinkedQueue<SntpSample> sntpSamples = new ConcurrentLinkedQueue<>();
     private volatile long lastSyncTimeNs = 0;
     private volatile int sampleCount = 0;
+    private volatile ScheduledFuture<?> heartbeatFuture;
+
+    // 同步进度监听器
+    private volatile SyncProgressListener progressListener;
+
+    /**
+     * 同步进度监听器接口
+     */
+    public interface SyncProgressListener {
+        void onSyncProgress(int current, int total, double offsetMs);
+        void onSyncComplete(double offsetMs, double minRttMs, double maxRttMs);
+    }
 
     // SNTP 样本记录
     private static class SntpSample {
@@ -78,6 +92,12 @@ public class SoftwareSyncClient extends SoftwareSyncBase {
             // 记录收到响应的时间 t4
             long t4 = System.nanoTime();
 
+            // 如果已同步，跳过样本收集（防止重复同步）
+            if (synced) {
+                logger.trace("已同步，跳过样本收集");
+                return;
+            }
+
             try {
                 if (payload == null || payload.isEmpty()) {
                     // 兼容旧版本Leader（无SNTP数据）
@@ -105,12 +125,22 @@ public class SoftwareSyncClient extends SoftwareSyncBase {
                         return;
                     }
 
+                    // 再次检查同步状态（防止并发问题）
+                    if (synced) {
+                        return;
+                    }
+
                     // 添加样本
                     sntpSamples.add(new SntpSample(rtt, offset));
                     sampleCount++;
 
                     logger.trace("SNTP样本 #{}: RTT={}ms, Offset={}ms",
                             sampleCount, rtt / 1_000_000.0, offset / 1_000_000.0);
+
+                    // 通知进度
+                    if (progressListener != null) {
+                        progressListener.onSyncProgress(sampleCount, SYNC_SAMPLE_COUNT, offset / 1_000_000.0);
+                    }
 
                     // 收集够样本后计算最优偏移
                     if (sampleCount >= SYNC_SAMPLE_COUNT) {
@@ -160,6 +190,10 @@ public class SoftwareSyncClient extends SoftwareSyncBase {
      * 计算最优时钟偏移 - 从样本中筛选RTT最小的前N%，取平均值
      */
     private void calculateOptimalOffset() {
+        // 立即标记为已同步，防止后续心跳ACK继续触发同步
+        synced = true;
+        sampleCount = 0;
+
         // 取出所有样本
         List<SntpSample> samples = new ArrayList<>();
         SntpSample sample;
@@ -168,6 +202,7 @@ public class SoftwareSyncClient extends SoftwareSyncBase {
         }
 
         if (samples.isEmpty()) {
+            synced = false;  // 没有样本，重置状态
             return;
         }
 
@@ -193,19 +228,42 @@ public class SoftwareSyncClient extends SoftwareSyncBase {
 
         // 更新时钟偏移
         setLeaderFromLocalNs(avgOffset);
-        synced = true;
         lastSyncTimeNs = System.nanoTime();
-        sampleCount = 0;
+
+        double offsetMs = avgOffset / 1_000_000.0;
+        double minRttMs = minRtt / 1_000_000.0;
+        double maxRttMs = maxRtt / 1_000_000.0;
 
         logger.info("🕐 SNTP同步完成: 偏移={}ms, 样本数={}/{}, RTT范围=[{}ms, {}ms]",
-                String.format("%.3f", avgOffset / 1_000_000.0),
+                String.format("%.3f", offsetMs),
                 bestCount, samples.size(),
-                String.format("%.2f", minRtt / 1_000_000.0),
-                String.format("%.2f", maxRtt / 1_000_000.0));
+                String.format("%.2f", minRttMs),
+                String.format("%.2f", maxRttMs));
+
+        // 通知完成
+        if (progressListener != null) {
+            progressListener.onSyncComplete(offsetMs, minRttMs, maxRttMs);
+        }
+
+        // 切换到正常心跳频率
+        switchToNormalHeartbeat();
     }
 
     private void startHeartbeat() {
-        heartbeatScheduler.scheduleAtFixedRate(() -> {
+        // 初始使用快速心跳模式加速同步
+        startHeartbeatWithInterval(SYNC_HEARTBEAT_INTERVAL_MS);
+        logger.info("🚀 启动快速同步模式 (心跳间隔: {}ms, 预计{}秒完成)",
+                SYNC_HEARTBEAT_INTERVAL_MS,
+                (SYNC_SAMPLE_COUNT * SYNC_HEARTBEAT_INTERVAL_MS) / 1000.0);
+    }
+
+    private void startHeartbeatWithInterval(long intervalMs) {
+        // 取消现有的心跳任务
+        if (heartbeatFuture != null && !heartbeatFuture.isCancelled()) {
+            heartbeatFuture.cancel(false);
+        }
+
+        heartbeatFuture = heartbeatScheduler.scheduleAtFixedRate(() -> {
             sendHeartbeat();
 
             // 检查是否需要重新同步
@@ -214,8 +272,18 @@ public class SoftwareSyncClient extends SoftwareSyncBase {
                 synced = false;
                 sampleCount = 0;
                 sntpSamples.clear();
+                // 切换到快速心跳模式
+                startHeartbeatWithInterval(SYNC_HEARTBEAT_INTERVAL_MS);
             }
-        }, 0, 1, TimeUnit.SECONDS);
+        }, 0, intervalMs, TimeUnit.MILLISECONDS);
+    }
+
+    /**
+     * 切换到正常心跳频率（同步完成后调用）
+     */
+    private void switchToNormalHeartbeat() {
+        startHeartbeatWithInterval(NORMAL_HEARTBEAT_INTERVAL_MS);
+        logger.debug("切换到正常心跳模式 (间隔: {}ms)", NORMAL_HEARTBEAT_INTERVAL_MS);
     }
 
     private void sendHeartbeat() {
@@ -264,6 +332,37 @@ public class SoftwareSyncClient extends SoftwareSyncBase {
      */
     public boolean isSynced() {
         return synced;
+    }
+
+    /**
+     * 获取同步进度 (0-100)
+     */
+    public int getSyncProgress() {
+        if (synced) {
+            return 100;
+        }
+        return Math.min(100, (sampleCount * 100) / SYNC_SAMPLE_COUNT);
+    }
+
+    /**
+     * 获取当前样本数
+     */
+    public int getSampleCount() {
+        return sampleCount;
+    }
+
+    /**
+     * 获取目标样本数
+     */
+    public int getTargetSampleCount() {
+        return SYNC_SAMPLE_COUNT;
+    }
+
+    /**
+     * 设置同步进度监听器
+     */
+    public void setSyncProgressListener(SyncProgressListener listener) {
+        this.progressListener = listener;
     }
 
     /**

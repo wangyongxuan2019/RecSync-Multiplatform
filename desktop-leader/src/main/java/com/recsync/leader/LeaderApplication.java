@@ -81,6 +81,7 @@ public class LeaderApplication extends Application {
     // 客户端状态管理
     private ConcurrentHashMap<String, Integer> clientCameraStatus = new ConcurrentHashMap<>();  // 设备名 -> 摄像头状态
     private ConcurrentHashMap<String, Boolean> clientSyncStatus = new ConcurrentHashMap<>();    // 设备名 -> SNTP同步状态
+    private ConcurrentHashMap<String, Integer> clientSyncProgress = new ConcurrentHashMap<>();  // 设备名 -> 同步进度(0-100)
 
     @Override
     public void start(Stage primaryStage) {
@@ -954,18 +955,31 @@ public class LeaderApplication extends Application {
         logger.debug("收到RPC回调: method={}, payload={}, from={}", method, payload, fromAddress.getHostAddress());
 
         if (method == SyncConstants.METHOD_CLIENT_STATUS) {
-            // 处理客户端状态上报: deviceName|cameraStatus|synced
+            // 处理客户端状态上报: deviceName|cameraStatus|synced|syncProgress
             try {
                 String[] parts = payload.split("\\|");
-                if (parts.length >= 3) {
+                if (parts.length >= 4) {
+                    // 新格式：包含同步进度
+                    String deviceName = parts[0];
+                    int cameraStatus = Integer.parseInt(parts[1]);
+                    boolean synced = Boolean.parseBoolean(parts[2]);
+                    int syncProgress = Integer.parseInt(parts[3]);
+                    clientCameraStatus.put(deviceName, cameraStatus);
+                    clientSyncStatus.put(deviceName, synced);
+                    clientSyncProgress.put(deviceName, syncProgress);
+                    logger.trace("客户端状态更新: {} -> 摄像头:{}, 同步:{}, 进度:{}%",
+                            deviceName, cameraStatus, synced, syncProgress);
+                } else if (parts.length >= 3) {
+                    // 旧格式：不含进度
                     String deviceName = parts[0];
                     int cameraStatus = Integer.parseInt(parts[1]);
                     boolean synced = Boolean.parseBoolean(parts[2]);
                     clientCameraStatus.put(deviceName, cameraStatus);
                     clientSyncStatus.put(deviceName, synced);
+                    clientSyncProgress.put(deviceName, synced ? 100 : 0);
                     logger.trace("客户端状态更新: {} -> 摄像头:{}, 同步:{}", deviceName, cameraStatus, synced);
                 } else if (parts.length >= 2) {
-                    // 兼容旧格式
+                    // 兼容最旧格式
                     String deviceName = parts[0];
                     int cameraStatus = Integer.parseInt(parts[1]);
                     clientCameraStatus.put(deviceName, cameraStatus);
@@ -1048,13 +1062,16 @@ public class LeaderApplication extends Application {
             Platform.runLater(() -> {
                 clientListView.getItems().clear();
                 clients.forEach((addr, info) -> {
-                    // 获取SNTP时钟同步状态
+                    // 获取SNTP时钟同步状态和进度
                     Boolean synced = clientSyncStatus.get(info.name());
+                    Integer progress = clientSyncProgress.get(info.name());
                     String syncStatus;
                     if (synced != null && synced) {
-                        syncStatus = "✅同步";  // 已同步 - 绿色勾
+                        syncStatus = "✅已同步";  // 已同步 - 绿色勾
+                    } else if (progress != null && progress > 0) {
+                        syncStatus = String.format("⏳%d%%", progress);  // 显示进度百分比
                     } else {
-                        syncStatus = "⏳同步中";  // 同步中 - 显眼的等待状态
+                        syncStatus = "⏳0%";  // 等待同步
                     }
 
                     // 获取摄像头状态
