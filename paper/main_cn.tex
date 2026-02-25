@@ -1,0 +1,563 @@
+% LESS-200: Scientific Data - Data Descriptor (中文版)
+% 用于提交至 Scientific Data (Nature Portfolio)
+% 格式: Data Descriptor
+
+\documentclass[12pt]{article}
+
+% ============================================================
+% 包
+% ============================================================
+\usepackage[margin=2.5cm]{geometry}
+\usepackage{ctex} % 中文支持
+\usepackage{times}
+\usepackage{graphicx}
+\usepackage{amsmath}
+\usepackage{amssymb}
+\usepackage{hyperref}
+\usepackage{lineno}
+\usepackage[super,sort&compress]{natbib}
+\usepackage{booktabs}
+\usepackage{multirow}
+\usepackage{tabularx}
+\usepackage{float}
+\usepackage{xcolor}
+\usepackage{url}
+\usepackage{siunitx}
+\usepackage{enumitem}
+\usepackage{forest}
+
+% 行号（投稿必需）
+\linenumbers
+
+% Hyperref 设置
+\hypersetup{
+  colorlinks=true,
+  linkcolor=blue,
+  citecolor=blue,
+  urlcolor=blue
+}
+
+% ============================================================
+% 标题和作者
+% ============================================================
+\title{LESS-200: 面向自动落地错误评分的细粒度标注同步双视角视频数据集}
+
+\author{
+  王永选\textsuperscript{1},
+  作者二\textsuperscript{2},
+  作者三\textsuperscript{3},
+  赵亮\textsuperscript{*}
+}
+
+\date{}
+
+\begin{document}
+
+  \maketitle
+
+% 单位
+  \noindent
+  \textsuperscript{1}山东体育学院，济南，山东，中国 \\
+  \textsuperscript{*}通讯作者: zhaoliang@sdpei.edu.cn
+
+% ============================================================
+% 摘要
+% ============================================================
+  \begin{abstract}
+    \noindent
+    落地错误评分系统（Landing Error Scoring System, LESS）是一种经过验证的临床工具，通过双视角视频评估跳跃落地生物力学来筛查前交叉韧带损伤风险，然而其自动化一直受限于缺乏公开的基准数据集。本文构建了 LESS-200——首个公开可用的大规模 LESS 数据集，包含约 200 名受试者（每人 5 次试验，共计约 1,000 次有效试验）执行标准化下落垂直跳跃的同步双视角（正面和矢状面）视频记录。该数据集提供帧级关键帧标注（初始、初始接触、最大膝关节屈曲和结束）、17 个生物力学指标的专家 LESS 评分，以及2D 姿态估计数据。受试者来自多种运动项目（篮球、排球、羽毛球等）和运动水平（从国家级到业余），性别分布均衡。所有数据均使用开源软件同步系统 RecSync 收集，并使用专门构建的标注工具 LESS-Annotator 进行标注。从数据采集到专家标注的完整流程均公开可用，支持复制和扩展。LESS-200 数据集有望作为自动 LESS 评分、关键帧检测和运动生物力学研究的标准化基准。
+  \end{abstract}
+
+% 关键词
+  \noindent\textbf{关键词：} 落地错误评分；前交叉韧带；姿态估计；运动损伤筛查；开放数据集
+
+% ============================================================
+% 背景与概述
+% ============================================================
+  \section*{背景与概述}
+
+  前交叉韧带（ACL）损伤是年轻运动员群体中最常见的严重膝关节损伤，仅在美国每年估计发生 10 万至 20 万例\textsuperscript{1,2}，考虑康复、生产力损失和长期关节退变等因素，每例终身经济负担可达 6 万至 17 万美元\textsuperscript{3}。约 20\%--25\% 的年轻运动员在重返运动后五年内发生继发性 ACL 损伤\textsuperscript{4}，而无论是否进行手术重建\textsuperscript{5}，仍有50\%--70\% 的患者在 10 至 20 年内发展为膝骨关节炎。ACL 损伤集中在涉及跳跃落地和变向动作的运动项目中，女性运动员发病率比男性高 2 至 4 倍\textsuperscript{6,7}，这一显著差异主要归因于两性之间神经肌肉控制策略差异\textsuperscript{8}。针对性神经肌肉训练可将 ACL 损伤风险降低约 50\%\textsuperscript{9,10,19,20}，但干预的前提是筛查：在庞大的运动员群体中识别出落地生物力学较差的个体。这使得挑战集中在必须同时满足评估准确性和大规模可行性的筛查工具上。
+
+  落地错误评分系统（LESS）正是为满足这一需求而设计的。当Padua 等人（2009）引入该系统时\textsuperscript{11}，其核心设计理念是\textbf{标准化的落地生物力学评估仅需使用双视角视频}，无需测力台、动作捕捉系统或其他昂贵的实验室设备。在 LESS 方案中，受试者从 30\,cm 高的跳跃箱执行下落垂直跳跃（DVJ），评分者通过正面和矢状面回放视频，进而评估 17 个生物力学指标——涵盖膝关节、髋关节、躯干和足部姿势，分别在初始接触（IC）、最大膝关节屈曲（MKF）和 IC 至 MKF 过渡阶段进行评估——对每个指标给出 0/1 或 0/1/2 的评分，总分范围为 0--19。在 2691 名军校学员中进行的原始验证研究显示出强评分者间信度（ICC = 0.84）和评分者内信度（ICC = 0.91），LESS 总分与三维运动学和动力学变量之间存在显著相关性\textsuperscript{11}。Padua 等人（2015）随后在 1564 名精英青少年足球运动员中进行的前瞻性研究进一步确立了 LESS 的预测效度，发现总分 $\geq$5 的个体 ACL 损伤风险显著升高\textsuperscript{12}。
+
+  尽管 LESS 在损伤风险筛查方面展现出良好的临床应用潜力，但其在实际推广过程中仍面临两个结构性瓶颈，从而制约了其在大规模和常规场景中的广泛应用。第一个是效率：虽然 LESS 被设计为"简单筛查工具"，但评分者仍需逐帧分析双视角视频，定位 IC 和 MKF 帧并判断 17 个指标，经过培训的评分者每次评估约需 8 分钟\textsuperscript{11}。对于涉及数百人的全校运动员筛查项目，人工评估在时间和人力上都是不可行的——Cameron 等人\textsuperscript{31}对 1,772 名军校学员的指标级人工评分即体现了这一工作量。第二个是一致性：部分 LESS 指标（如膝关节外翻程度、足部内旋）高度依赖评分者的主观视觉判断，尤其在动作表现接近评分阈值或缺乏明确判别特征的情况下，评分者间一致性显著下降，某些指标的一致率甚至低于 70\%\textsuperscript{13}。两个瓶颈指向同一个解决方案：通过计算机视觉和深度学习自动化 LESS 评分——机器不会疲劳，且对相同输入产生相同输出。
+
+  近年来已有多项研究尝试自动化 LESS 评分（表~\ref{tab:comparison}），但每种方法均存在局限性。Mauntel 等人\textsuperscript{16}率先使用 Microsoft Kinect 深度摄像头结合 PhysiMax 商业软件实现了 21 项 LESS 指标的自动评分；Eckard 等人\textsuperscript{32}将该方案扩展至 2,235 名军校学员，但 Kinect 已停产且 PhysiMax 为闭源商业系统，限制了研究的可复制性。Hebert-Losier 等人\textsuperscript{30}转向纯视频路线，使用 OpenPose 从双视角视频中提取 2D 姿态关键点，通过随机森林回归预测 LESS 总分（MAE = 1.23），证明了基于开源姿态估计的自动评分可行性，但仅预测总分而未涉及指标级评分。最近，Turner 等人\textsuperscript{21}开发了 OpenLESS——基于 OpenCap 智能手机三维运动捕捉的开源自动 LESS 系统，在不到 25 分钟内处理 353 次试验（人工专家评分约需 35 小时），实现了指标级自动评分并开源了代码。
+
+  然而，上述自动化尝试虽然在算法层面取得了进展，却共同面临一个更根本的制约：缺乏公开可用的标准化基准数据集。如表~\ref{tab:comparison} 所示，跨越 16 年的七项 LESS 相关研究无一公开发布其数据集，这意味着不同算法之间无法在相同数据上进行公平比较。这些私有数据集还存在结构性差异：Padua 等人\textsuperscript{11}和 Hebert-Losier 等人\textsuperscript{30}仅提供总分标注，无法支撑指标级自动评分研究；Eckard 等人\textsuperscript{32}使用单视角 Kinect 深度摄像头，与 LESS 标准的双视角协议不一致；仅有 OpenLESS\textsuperscript{21} 的代码开源，但数据集仅按需提供且规模有限（92 名受试者）。对于深度学习方法，缺乏公开基准意味着不存在可比较的评估标准——这与计算机视觉领域的范式形成鲜明对比，在计算机视觉中，ImageNet\textsuperscript{14}、COCO\textsuperscript{15} 和 Kinetics\textsuperscript{27} 等开放数据集通过标准化基准推动了算法进步。
+
+  LESS-200 旨在填补这一空白。与现有数据集相比（表~\ref{tab:comparison}），它是首个同时满足以下全部标准的 LESS 数据集：完全公开可访问（而非按需申请）；大规模（约 200 名受试者 $\times$ 5 次试验 $\approx$ 1,000 组试验）；符合 LESS 标准的双视角同步视频；帧级关键帧标注和 17 项指标级专家 LESS 评分（而非仅总分）；以及预先提取的 2D 姿态估计数据。受试者跨越多个运动项目（篮球、排球、羽毛球）和运动水平（从国家级运动员到业余学生），性别分布均衡。这种分层设计确保了在整个 0--19 LESS 范围内的充分评分覆盖，避免了既往研究中从单一人群亚组（如军校学员\textsuperscript{11,31,32}或单一运动项目\textsuperscript{12}）采样导致的评分分布偏斜。
+
+  关键的是，LESS-200 的整个数据采集和标注流程基于消费级高清摄像头和两个专门构建的开源工具：RecSync（基于软件的多设备同步视频记录系统）和 LESS-Annotator（专门用于 LESS 评分工作流的专家标注系统）。这一设计选择是有意的，并与 LESS 本身的临床理念保持一致\textsuperscript{11}：既往依赖 Kinect 深度摄像头和 PhysiMax 商业软件的方案\textsuperscript{16,32}因设备停产或软件闭源而难以复现；如果数据集采集需要实验室级设备（如 Vicon 动作捕捉或硬件锁相同步），将与 LESS 的低成本、纯视频前提相矛盾，并使其他研究团队难以复制和扩展该数据集。数据集、采集工具和标注工具均作为开源发布，构成了从采集到标注再到使用的端到端可复制流程。
+
+  \begin{table}[htbp]
+    \centering
+    \caption{LESS-200 与现有 LESS 数据集的比较。所有先前的数据集均为私有或仅按需提供，且缺乏开源工具链。}
+    \label{tab:comparison}
+    \footnotesize
+    \resizebox{\textwidth}{!}{%
+      \begin{tabular}{llcccccc}
+        \toprule
+        \textbf{数据集} & \textbf{样本量} & \textbf{视角} & \textbf{同步} & \textbf{姿态估计} & \textbf{标注} & \textbf{开源} & \textbf{公开} \\
+        \midrule
+        Padua 2009\textsuperscript{11} & 2,691 / $\sim$8,073 & 双 & 硬件 & --- & 总分 & 否 & 否 \\
+        Onate 2010\textsuperscript{13} & 19 / $\sim$57 & 双 & 硬件 & --- & 指标级 & 否 & 否 \\
+        Mauntel 2017\textsuperscript{16} & 57 / 171 & 双 + Kinect & 硬件 & Kinect & 指标级 & 否 & 否 \\
+        Hebert-Losier 2020\textsuperscript{30} & 144 / 320 & 双 & 硬件 & OpenPose & 总分 & 否 & 否 \\
+        Cameron 2022\textsuperscript{31} & 1,772 / $\sim$5,316 & 双 & 硬件 & --- & 指标级 & 否 & 否 \\
+        Eckard 2022\textsuperscript{32} & 2,235 / $\sim$6,705 & 单 (Kinect) & --- & PhysiMax & 指标级 & 否 & 否 \\
+        Turner 2025\textsuperscript{21} & 92 / 353 & 双 (手机) & 软件 & OpenCap & 指标级 & 代码 & 按需 \\
+        \textbf{LESS-200 (本文)} & \textbf{$\sim$200 / $\sim$1,000} & \textbf{双} & \textbf{软件} & \textbf{MediaPipe} & \textbf{关键帧+指标} & \textbf{全部} & \textbf{是} \\
+        \bottomrule
+      \end{tabular}%
+    }
+  \end{table}
+
+% ============================================================
+% 方法
+% ============================================================
+  \section*{方法}
+
+  \subsection*{受试者}
+
+  约 200 名受试者从山东体育学院学生群体中招募。样本设计以拓宽 LESS 评分分布范围为首要目标，而非单纯追求样本量最大化，这是因为评分分布的广度直接决定了数据集能否有效支撑自动化 LESS 评分模型的开发与评估。
+
+  山东体育学院作为体育类专业院校，受试者涵盖国家一级、二级运动员及普通体育专业学生，运动水平梯度完整，具有良好的代表性。基于此，本研究采用以运动水平分层为核心的采样策略。经系统专项训练的运动员通常具备更优的落地生物力学特征，表现为更大的膝关节与髋关节屈曲角度以及更稳定的躯干控制，对应较低的 LESS 评分；相较之下，未经专项训练的普通学生更易出现僵硬落地及膝关节外翻等不利模式，对应较高的 LESS 分数。通过纳入从国家级运动员到业余学生的完整运动水平梯度，数据集在高分与低分区间均实现了充分覆盖，从而有效缓解了类别不平衡问题。
+
+  此外，受试者来自多个运动专项，进一步丰富了落地动作模式的多样性。例如，篮球与排球运动员由于项目特异性的技术要求，往往形成差异化的落地策略，这种跨项目的动作变异性有助于提升自动评分模型的泛化能力。
+
+  纳入标准为：年龄 18--30 岁；能够独立完成下落垂直跳跃（DVJ）测试；过去 6 个月内具有规律的锻炼或训练记录；过去 6 个月内无急性下肢损伤；并自愿签署书面知情同意书。排除标准为：既往 ACL 损伤或重建史；过去 12 个月内发生下肢骨折、韧带撕裂或半月板损伤；存在心血管疾病或神经肌肉系统疾病；体重指数（BMI）$>$ 30\,kg/m\textsuperscript{2}；以及测试当日自述存在明显身体不适。本研究已获得山东体育学院机构伦理委员会批准（批准号：\_\_\_\_）。
+
+  \subsection*{实验设置}
+
+  设备选择遵循与 LESS 临床定位一致和可复制性两个原则（详见背景与概述）。两台高清摄像头（型号：\_\_\_）放置在额状面（正面视角）和矢状面（矢状视角），与 LESS 标准定义的两个视角一致。两台摄像头均以 1920$\times$1080 分辨率和 60\,fps 录制，距离跳跃箱 3--4\,m，高度为 0.8--1.0\,m（约膝关节高度）。测试场地配备平坦、防滑运动地板、浅色均匀背景墙以最大化身体-背景对比度（直接影响后续姿态估计精度）、均匀照明（500--1000\,lux）以避免阴影伪影，以及标准 30\,cm 跳跃箱（LESS 方案）。实验布局如图~\ref{fig:setup} 所示。
+
+  \begin{figure}[htbp]
+    \centering
+    % TODO: 插入实验布局照片或示意图
+    \fbox{\parbox{0.8\textwidth}{\centering\vspace{3cm}\textit{[待插入实验布局照片/示意图]}\vspace{3cm}}}
+    \caption{实验布局示意图。正面摄像头拍摄额状面，矢状面摄像头拍摄矢状面，距跳跃箱 3--4\,m，高度约为膝关节高度。}
+    \label{fig:setup}
+  \end{figure}
+
+  视频同步使用 RecSync（详见双视角同步章节），标注使用 LESS-Annotator（详见专家标注章节）。
+
+  \subsection*{双视角同步（RecSync）}
+
+  两个摄像头视角之间的帧级同步是数据质量的前提而非可选功能。在 17 个 LESS 指标中，有几个需要同时在同一时间点评估正面和矢状面信息：例如，评估 IC 时的膝关节状态需要矢状面判断屈曲角度（指标 1）和正面评估外翻（指标 5）。如果两个视角不同步，评分者或自动算法会观察到不同物理时刻的姿势，导致评分错误。此外，IC 和 MKF 帧标注依赖于双视角一致性——矢状面用于跟踪关节角度变化，而正面确认足-地接触时间，两者必须对应同一物理时刻。
+
+  RecSync 通过三个协调的机制实现纯软件帧级同步。第一，\textbf{SNTP 时钟同步}：系统使用通过有线局域网连接的 Leader-Client 架构。客户端定期与 Leader 交换 SNTP 时间戳，使用四时间戳模型\textsuperscript{18}计算时钟偏移。虽然基于硬件的同步协议如 IEEE 1588-2008（精确时间协议，PTP）可以达到亚微秒级精度\textsuperscript{28}，但它们需要专用硬件和特定网络基础设施。SNTP 提供了纯软件替代方案，在保持数据集低成本、消费级硬件前提下，实现了 LESS 评估应用所需的足够精度。
+  \begin{equation}
+    \text{偏移} = \frac{(t_2 - t_1) + (t_3 - t_4)}{2}
+  \end{equation}
+  其中 $t_1$ 和 $t_4$ 是客户端时间戳，$t_2$ 和 $t_3$ 是 Leader 端时间戳。网络不对称和瞬时抖动会在单样本偏移估计中引入误差；因此，系统连续收集 30 个 SNTP 样本，按往返时间（RTT）升序排序，并计算前 30\% 样本（最低 RTT）的偏移平均值——RTT 最小的样本代表最对称的网络路径和最小抖动，产生最可靠的偏移估计。每 10 分钟触发自动重新同步以补偿由于晶体振荡器频率差异导致的时钟漂移。
+
+  第二，\textbf{预设触发时间}：而非广播"立即开始"命令（其中客户端之间的网络延迟差异会引入同步误差），Leader 计算未来时间点 $\text{triggerTime} = \text{currentTime} + 200\,\text{ms}$ 并将其广播给所有客户端，客户端将此时间转换为其本地时间域并等待触发。200\,ms 缓冲时间远超典型局域网单程延迟（$<$1\,ms），确保所有客户端在触发时刻之前收到命令。该机制完全消除了网络传输延迟不确定性对同步误差的影响，使精度仅取决于时钟同步质量。
+
+  第三，\textbf{软录制模式}：摄像头从系统启动时连续捕获带同步时间戳的帧，并且录制器已预初始化完成编码器预热。仅当帧时间戳 $\geq$ triggerTime 时才开始帧写入。在传统"硬录制"模式下，收到录制命令后录制器初始化会引入设备相关的毫秒级到数十毫秒级延迟——在帧级同步中不可忽略。软录制将"何时开始捕获"与"何时开始写入"解耦，确保首帧时序仅取决于时钟同步和帧捕获间隔，而非硬件初始化速度。
+
+  三个机制共同产生的理论同步精度为：
+  \begin{equation}
+    |t_{\text{start}}^A - t_{\text{start}}^B| \leq \frac{1}{\text{fps}} + \sigma_{\text{SNTP}} \approx 18\text{--}22\,\text{ms} \quad (60\,\text{fps})
+  \end{equation}
+  其中 $\sigma_{\text{SNTP}}$ 表示 SNTP 同步后的残余时钟偏移不确定性（在有线局域网中通常为 1--5\,ms）。经验验证在技术验证章节中呈现。RecSync 作为开源软件发布于\href{https://github.com/wangyongxuan2019/RecSync-Multiplatform}{RecSync-Multiplatform}。
+
+  \subsection*{数据采集方案}
+
+  数据采集严格遵循标准化 LESS DVJ 方案\textsuperscript{11}：受试者站在 30\,cm 跳跃箱上，双脚与肩同宽，向前跳下箱（非追求距离），双脚同时落地，立即进行最大努力垂直跳跃，然后自然落地。强调两条口头指令："落地后立即跳回"（确保落地动作连续性和反应性，这是 LESS 评估的核心观察窗口）和"尽可能跳高"（确保最大努力而非故意控制落地姿势，后者会产生人为的低分，不能反映真实的神经肌肉控制模式）。
+
+  每位受试者完成 5 次有效试验，间隔 30 秒休息。五次重复设计有两个目的：提供受试者内试验间变异信息（反映运动稳定性）并为下游研究生成额外的训练样本。出现以下情况时试验被排除并重试：单脚先落地；无反应跳跃或反应跳跃明显延迟；检测到录制设备故障或同步异常；或出现明显动作错误。
+
+  录制工作流程遵循标准化序列：在 Leader 上设置受试者 ID $\rightarrow$ 确认两个客户端已连接并同步 $\rightarrow$ 口头提示 $\rightarrow$ 在 Leader 上点击"开始录制" $\rightarrow$ 受试者完成动作（约 3--5 秒）$\rightarrow$ 在 Leader 上点击"停止录制" $\rightarrow$ 回放质量检查 $\rightarrow$ 试验编号自动递增。文件命名遵循约定：\texttt{\{view\}\_\{subjectID\}\_\{taskID\}\_\{timestamp\}\_\{epoch\}.mp4}。
+
+  \subsection*{姿态估计}
+
+  使用 MediaPipe BlazePose\textsuperscript{17} 对所有视频进行二维姿态估计，每帧提取 33 个身体关键点，包含归一化 2D 坐标和置信度分数。在 LESS 自动化研究中，姿态估计已被证明是可行的技术路线：Hebert-Losier 等人\textsuperscript{30}使用 OpenPose\textsuperscript{25} 从双视角视频中提取 2D 关键点并成功预测了 LESS 总分；Turner 等人\textsuperscript{21}则通过 OpenCap 实现了基于智能手机的 3D 运动学估计。本数据集选择 MediaPipe 而非 OpenPose，是因为其在消费级设备上的推理效率更高、关键点数量更多（33 个 vs. 25 个），且最近的综述证实其作为实验室级动作捕捉的低成本替代方案具有良好的可靠性\textsuperscript{22,23}。提供预先提取的姿态数据旨在降低下游研究的技术门槛：姿态估计是一个独立的技术步骤，涉及模型选择、参数调优和部署，要求每个数据集用户独立完成此步骤不仅重复劳动，而且当不同研究人员采用不同估计方法时，导致结果无法比较。通过预先提取并统一发布关键点数据，研究人员可以直接使用关键点序列训练 LESS 评分模型，将精力集中在评分算法开发上。
+
+  检测失败帧用零置信度标记而未插值，保留原始检测状态。这一设计是有意的：不同的插值策略引入不同的偏差，数据集提供者选择特定的插值方法会限制用户灵活性。保留原始检测结果并允许研究人员根据需要选择处理策略是更负责任的做法。姿态估计质量在技术验证章节中验证。
+
+  \subsection*{专家标注（LESS-Annotator）}
+
+  专家标注使用 LESS-Annotator 进行，这是一个专门为 LESS 评分工作流设计的开源标注系统。该系统集成双视角同步视频播放、逐帧和逐秒导航、一键关键帧标记和 17 项评分面板。其相对于通用标注工具的主要优势是将完整的 LESS 评分程序——定位 IC 帧 $\rightarrow$ 评估 IC 时刻指标 $\rightarrow$ 定位 MKF 帧 $\rightarrow$ 评估 MKF 时刻指标 $\rightarrow$ 评估 IC 到 MKF 过渡指标 $\rightarrow$ 整体印象评分——编码为引导工作流，确保每个评分者按相同顺序完成所有评分项目，减少遗漏和顺序效应。
+
+  标注人员包括 $x$ 名具有运动医学或运动科学背景的评分者。培训遵循结构化方案：系统 LESS 评分标准教学 $\rightarrow$ 标准视频案例讨论 $\rightarrow$ 20 例练习标注 $\rightarrow$ 一致性测试（通过率 $>$80\% 方可参与正式标注）。培训的目的不仅是记忆规则，而是通过重复讨论边缘案例建立判断标准共识——特别是对于膝关节外翻程度和躯干屈曲角度等连续量，必须离散化为 0/1 或 0/1/2 分数。
+
+  每次试验标注三个关键帧：起始帧（受试者开始离开箱子的时刻，定义分析窗口开始）、IC 帧（双脚首次接触地面的时刻，主要 LESS 参考时间点）和 MKF 帧（膝关节屈曲角度达到最大值的时刻，次要参考时间点）。然后根据原始 LESS 方案\textsuperscript{11}在 IC 和 MKF 处对 17 个 LESS 指标进行评分，总分范围为 0 至 19，风险类别定义为：优秀（$\leq$4）、良好（5--6）、中等（7--9）和较差（$\geq$10）。
+
+  采用双评分者独立标注协议并仲裁：两名评分者独立对每个视频进行评分，一致的指标直接采用，不一致的指标由第三位专家仲裁员解决。选择独立标注而非共识讨论是为了获得真实的评分者间信度数据——如果评分者在标注前讨论，信度统计将人为膨胀，无法反映 LESS 评分的固有主观性。所有标注保留原始双评分者分数、一致性判断和仲裁记录，使用户能够分析哪些指标表现出更大的主观性，并将此信息作为先验信息纳入自动评分模型设计。
+
+  LESS-Annotator 作为开源软件发布于\href{https://github.com/wangyongxuan2019/LessAnnotation}{LessAnnotation}。
+
+% ============================================================
+% 数据记录
+% ============================================================
+  \section*{数据记录}
+
+  LESS-200 数据集托管于 Figshare/Zenodo（DOI：\_\_\_），采用 CC BY 4.0 许可证。表~\ref{tab:overview} 总结了数据组件。
+
+  \begin{table}[htbp]
+    \centering
+    \caption{LESS-200 数据集组件概述。}
+    \label{tab:overview}
+    \begin{tabular}{lccc}
+      \toprule
+      \textbf{数据类型} & \textbf{数量} & \textbf{格式} & \textbf{大小（每文件）} \\
+      \midrule
+      正面视频 & $\sim$1,000 & MP4 (H.264) & 50--100\,MB \\
+      矢状面视频 & $\sim$1,000 & MP4 (H.264) & 50--100\,MB \\
+      正面关键点 & $\sim$1,000 & JSON & 1--5\,MB \\
+      矢状面关键点 & $\sim$1,000 & JSON & 1--5\,MB \\
+      关键帧标注 & 1 & CSV & $\sim$100\,KB \\
+      LESS 评分 & 1 & CSV & $\sim$200\,KB \\
+      标注者一致性 & 1 & CSV & $\sim$50\,KB \\
+      受试者元数据 & 1 & CSV & $\sim$20\,KB \\
+      录制日志 & 1 & CSV & $\sim$50\,KB \\
+      同步验证 & 1 & CSV & $\sim$10\,KB \\
+      \bottomrule
+    \end{tabular}
+  \end{table}
+
+  \textbf{视频数据。} 所有视频以 MP4 容器中的 H.264 编码，分辨率为 1920$\times$1080，帧率为 60\,fps，每个片段长约 3--8 秒，涵盖从离开箱子到反应跳跃落地的完整动作周期。每次试验包括一个正面和一个矢状面同步视频。选择 60\,fps 而非 30\,fps 反映了 DVJ 落地阶段的时间特性：关键事件（足-地接触、最大膝关节屈曲）发生在极短的时间间隔内，60\,fps 提供约 16.7\,ms 的时间分辨率，能够更精确地定位 IC 和 MKF 帧并为自动关键帧检测算法提供更细粒度的输入。
+
+  \textbf{关键点数据。} 以 JSON 格式存储，每帧记录 33 个身体关键点，包括归一化 2D 坐标和置信度分数。每个文件包括元数据（视频标识符、帧率、分辨率、姿态模型版本），后跟按帧索引的关键点记录数组。
+
+  \textbf{关键帧标注}（\texttt{keyframes.csv}）包含：视频标识符、起始帧、IC 帧、MKF 帧、标注者标识符、IC 和 MKF 的标注者间帧差异，以及解决方法（共识或仲裁）。
+
+  \textbf{LESS 评分}（\texttt{less\_scores.csv}）包含：视频标识符、17 个单项分数（\texttt{item\_01} 至 \texttt{item\_17}）、总分（0--19）、风险等级类别、标注者标识符、一致指标数（0--17），以及评分确定方法。
+
+  \textbf{受试者元数据}（\texttt{subjects.csv}）包含：受试者标识符、性别、年龄、身高（cm）、体重（kg）、BMI、优势腿、运动类型、运动水平（national\_1、national\_2、sub\_level 或 general）、训练年限、训练频率、去标识化的损伤史和测试日期。不包含个人身份信息（姓名、联系方式）。
+
+  \textbf{录制日志}（\texttt{recording\_log.csv}）包含：视频标识符、受试者标识符、试验编号、重拍状态、同步状态、同步偏移（ms）、录制持续时间（s）、质量检查结果（通过/失败/边缘），以及备注。
+
+  数据集目录结构组织如下：
+
+  \begin{figure}[htbp]
+    \centering
+    \begin{forest}
+      for tree={
+        font=\ttfamily,
+        grow'=0,
+        child anchor=west,
+        parent anchor=south,
+        anchor=west,
+        calign=first,
+        edge path={
+          \noexpand\path [draw, \forestoption{edge}]
+          (!u.south west) +(7.5pt,0) |- node[fill,inner sep=1.25pt] {} (.child anchor)\forestoption{edge label};
+        },
+        before typesetting nodes={
+          if n=1
+            {insert before={[,phantom]}}
+            {}
+        },
+        fit=band,
+        before computing xy={l=15pt},
+      }
+      [LESS-200/
+      [videos/
+      [front/ \normalfont\textit{~--- front\_s001\_m01\_e1.mp4, \ldots}]
+      [side/ \normalfont\textit{~--- side\_s001\_m01\_e1.mp4, \ldots}]
+      ]
+      [keypoints/
+      [front/ \normalfont\textit{~--- front\_s001\_m01\_e1.json, \ldots}]
+      [side/ \normalfont\textit{~--- side\_s001\_m01\_e1.json, \ldots}]
+      ]
+      [annotations/
+      [keyframes.csv]
+      [less\_scores.csv]
+      [annotator\_agreement.csv]
+      ]
+      [metadata/
+      [subjects.csv]
+      [recording\_log.csv]
+      [sync\_validation.csv]
+      ]
+      [splits/
+      [recommended\_splits.json]
+      ]
+      [code/
+      [dataloader.py]
+      [visualization.py]
+      [requirements.txt]
+      ]
+      [README.md]
+      ]
+    \end{forest}
+    \caption{LESS-200 数据集目录结构。}
+    \label{fig:directory}
+  \end{figure}
+
+% ============================================================
+% 技术验证
+% ============================================================
+  \section*{技术验证}
+
+  本节回答评审者和用户将考虑至关重要的四个问题：视频采集质量是否符合标准、双视角同步是否满足 LESS 评估的精度要求、姿态估计输出是否可靠，以及专家标注是否一致。每个问题通过可复制的验证方法和定量证据来回答。
+
+  \subsection*{视频质量评估}
+
+  所有视频均经过程序化质量验证，检查分辨率一致性（1080p）、帧率一致性（60\,fps）和文件完整性。报告总体产量统计：记录的试验集总数、有效集数、排除集数和排除率。排除数据按原因分类（非标准运动执行、图像质量问题、同步异常），分布如图~\ref{fig:exclusion} 所示。报告排除率允许用户评估标准化采集方案的成熟度——较低的排除率表明更严格的方案执行，间接反映 RecSync 系统在现实数据采集中的稳定性。
+
+  \begin{figure}[htbp]
+    \centering
+    % TODO: 插入排除原因分布图
+    \fbox{\parbox{0.8\textwidth}{\centering\vspace{3cm}\textit{[待插入排除原因分布图]}\vspace{3cm}}}
+    \caption{按原因分类的排除试验集分布。}
+    \label{fig:exclusion}
+  \end{figure}
+
+  \subsection*{同步精度验证}
+
+  同步精度直接决定了任何给定时间点的双视角对应关系是否成立。验证采用智能手机秒表方法：在两个摄像头重叠视野中心放置显示毫秒级经过时间的智能手机，使用 RecSync 进行 10 次 10--15 秒的同步录制。事后对两个视频流进行逐帧审查，识别显示秒表相同毫秒数字的对应帧，并计算帧差。
+
+  该方法有三个优点：（1）零成本验证设备，任何团队都可以复制；（2）毫秒级秒表显示提供亚帧视觉参考——尽管最终精度受帧率限制（60\,fps 下为 16.7\,ms），但这足以验证帧级同步；（3）结果直观可解释，无需理解复杂的信号处理程序。为增强统计可靠性，10 次录制分布在不同系统操作阶段（初始同步后、运行 30 分钟后、重新同步后），以捕获时钟漂移和网络状态变化的影响。
+
+  验证结果总结于表~\ref{tab:sync}。影响分析将同步误差置于 LESS 评估要求的背景中：IC 到 MKF 间隔通常跨越 200--500\,ms（60\,fps 下 12--30 帧），约 1 帧（$\sim$17\,ms）的同步误差仅占该时间窗口的 3\%--8\%。所有 17 个 LESS 指标都是离散分数（0/1 或 0/1/2），相应的姿势变化发生在数十到数百毫秒的时间尺度上，远超同步误差。因此，帧级同步精度不会实质性影响 LESS 评分。
+
+  \begin{table}[htbp]
+    \centering
+    \caption{同步精度验证结果。}
+    \label{tab:sync}
+    \begin{tabular}{lc}
+      \toprule
+      \textbf{指标} & \textbf{数值} \\
+      \midrule
+      验证试验次数 & 10 \\
+      平均误差 & $x.x$ 帧（$xx.x$\,ms） \\
+      标准差 & $x.x$ 帧（$xx.x$\,ms） \\
+      最大误差 & $x$ 帧（$xx$\,ms） \\
+      95\% 置信区间 & [$x$，$x$]\,ms \\
+      0 帧误差比例 & $xx$\% \\
+      $\leq$1 帧误差比例 & $xx$\% \\
+      \bottomrule
+    \end{tabular}
+  \end{table}
+
+  \subsection*{姿态估计质量}
+
+  姿态估计数据作为派生的便利数据发布，其准确性决定了下游基于关键点研究的可信度。为进行验证，随机采样 $x$ 组试验，研究人员在关键帧（IC 和 MKF 帧）上手动标注 LESS 相关关节位置（膝关节、髋关节、踝关节、肩关节、脚趾），与算法估计进行比较。
+
+  报告指标包括检测成功率（具有完整身体关键点检测的帧比例）和每个关键点在 0.05 和 0.1 阈值下的正确关键点百分比（PCK@0.05 和 PCK@0.1）。结果强调与 LESS 评估直接相关的关节，因为这些特定关节的精度对于 LESS 评分目的比全身平均值更有意义。还分析典型失败情况（肢体交叉遮挡、运动模糊、宽松衣物遮挡关节），为用户提供关键点可靠性的现实预期。应强调关键点数据定位为"预计算的便利数据"而非"基本事实"；用户可根据此处提供的准确性信息决定是否使用提供的数据或提取自己的数据。
+
+  \subsection*{评分者间和评分者内信度}
+
+  标注质量构成了数据集能否作为监督学习"黄金标准"的核心证据。
+
+  \textbf{关键帧一致性。} 报告两个标注者之间 IC 和 MKF 帧的平均帧差和标准差。IC 帧一致性预期较高，因为足-地接触的视觉信号相对明确；MKF 帧一致性可能略低，因为膝关节屈曲角度在最大值附近变化逐渐，存在多帧模糊区域，不同标注者可能在此区间内选择不同帧。这种差异本身具有信息量，并透明报告。
+
+  \textbf{LESS 指标级评分者间信度}（表~\ref{tab:reliability}）。为 17 个指标中的每一个单独报告 Cohen's Kappa、一致率和仲裁率。预期模式包括：（1）二分项（0/1）通常比三分项（0/1/2）达到更高的 Kappa，因为后者引入了额外的判断边界；（2）矢状面指标（膝关节屈曲角度、躯干屈曲）通常比正面指标（膝关节外翻、足部内旋）显示出更高的一致性，因为矢状面角度变化较大且在视觉上更容易判断，而正面细微位移更多依赖主观评估；（3）整体印象指标（指标 17）表现出最低的 Kappa，因为其固有的主观性质。LESS 总分的组内相关系数（ICC）反映在所有 17 个指标汇总后的整体信度。
+
+  \begin{table}[htbp]
+    \centering
+    \caption{17 项 LESS 指标的评分者间信度。}
+    \label{tab:reliability}
+    \begin{tabular}{clccc}
+      \toprule
+      \textbf{指标} & \textbf{描述} & \textbf{Cohen's $\kappa$} & \textbf{一致率 (\%)} & \textbf{仲裁率 (\%)} \\
+      \midrule
+      1 & IC 时膝关节屈曲 & $x.xx$ & $xx.x$ & $xx.x$ \\
+      2 & IC 时髋关节屈曲 & $x.xx$ & $xx.x$ & $xx.x$ \\
+      3 & IC 时躯干屈曲 & $x.xx$ & $xx.x$ & $xx.x$ \\
+      4 & IC 时踝关节跖屈 & $x.xx$ & $xx.x$ & $xx.x$ \\
+      5 & IC 时膝关节外翻 & $x.xx$ & $xx.x$ & $xx.x$ \\
+      6 & IC 时躯干侧屈 & $x.xx$ & $xx.x$ & $xx.x$ \\
+      7 & IC 时站立宽度 & $x.xx$ & $xx.x$ & $xx.x$ \\
+      8 & IC 时足部旋转 & $x.xx$ & $xx.x$ & $xx.x$ \\
+      9 & IC 时双足对称接触 & $x.xx$ & $xx.x$ & $xx.x$ \\
+      10 & 膝关节屈曲位移 & $x.xx$ & $xx.x$ & $xx.x$ \\
+      11 & MKF 时髋关节屈曲 & $x.xx$ & $xx.x$ & $xx.x$ \\
+      12 & MKF 时躯干屈曲 & $x.xx$ & $xx.x$ & $xx.x$ \\
+      13 & 膝关节外翻位移 & $x.xx$ & $xx.x$ & $xx.x$ \\
+      14 & 关节位移 & $x.xx$ & $xx.x$ & $xx.x$ \\
+      15 & MKF 时站立宽度 & $x.xx$ & $xx.x$ & $xx.x$ \\
+      16 & MKF 时足部旋转 & $x.xx$ & $xx.x$ & $xx.x$ \\
+      17 & 整体印象 & $x.xx$ & $xx.x$ & $xx.x$ \\
+      \midrule
+      \multicolumn{2}{l}{LESS 总分 (ICC)} & \multicolumn{3}{c}{$x.xx$} \\
+      \bottomrule
+    \end{tabular}
+  \end{table}
+
+  \textbf{评分者内信度。} 随机 10\% 子样本（约 100 组试验）在 2 周间隔后重新标注，报告每项 Kappa 和 ICC。评分者内信度反映标注的时间稳定性——如果同一评分者在不同时间对同一视频给出不同分数，这表明该指标的判断标准存在固有不确定性。
+
+  \subsection*{数据集统计}
+
+  \textbf{受试者特征。} 报告年龄、身高、体重、BMI 和训练年限的描述性统计（平均 $\pm$ 标准差），针对全样本以及按性别、运动类型和运动水平分层，使用独立样本 $t$ 检验或单因素方差分析检验组间差异。这些数据帮助用户评估数据集对其目标人群的适用性。
+
+  \textbf{LESS 评分分布。} 呈现总分直方图、每项错误率（评分 $\geq$1 的比例，反映每个指标被触发的频率）和分组箱线图（按性别、运动类型、运动水平）。评分分布形状直接影响下游任务性能：如果总分集中在某一范围，模型在极端情况下的训练数据将不足。分层抽样设计部分缓解了此问题，但如果实际分布仍然偏斜，则透明报告并讨论对模型训练的影响。
+
+% ============================================================
+% 使用说明
+% ============================================================
+  \section*{使用说明}
+
+  \subsection*{获取和许可}
+
+  数据集可在 Figshare/Zenodo（DOI：\_\_\_）获取，采用知识共享署名 4.0 国际（CC BY 4.0）许可证。RecSync 源代码可在\href{https://github.com/wangyongxuan2019/RecSync-Multiplatform}{RecSync-Multiplatform}获取。LESS-Annotator 源代码可在\href{https://github.com/wangyongxuan2019/LessAnnotation}{LessAnnotation}获取。提供与数据集一起的 BibTeX 引用条目。
+
+  \subsection*{推荐应用}
+
+  LESS-200 支持多个研究方向：自动 LESS 评分（从视频或关键点序列预测 17 项分数）、关键帧检测（自动定位 IC 和 MKF 帧）、运动姿态评估基准测试、损伤风险分层（LESS 风险类别分类）和双视角 3D 重建（利用同步双视角数据进行 3D 姿态估计）。
+
+  \subsection*{数据划分}
+
+  我们推荐受试者级数据划分（而非视频级），以防止来自同一受试者的不同试验同时出现在训练集和测试集中——这是运动分析中常见的数据泄漏来源，因为来自同一人的不同试验表现出高度相似的运动模式。推荐划分为 70\%/15\%/15\%，按性别 $\times$ 运动水平分层抽样以确保跨子集的人群分布一致。在 \texttt{splits/recommended\_splits.json} 中提供预定义划分。
+
+  \subsection*{基准结果}
+
+  提供基准模型结果作为未来研究的参考基准。基准的价值不在于最优性能，而在于可复制性——使用数据集的研究人员可以首先复制基准结果以验证正确的数据加载和评估程序，然后在此基础上改进。所有基准实验均采用前述受试者级 70\%/15\%/15\% 数据划分，确保训练集与测试集之间无受试者重叠。
+
+  \textbf{任务一：关键帧检测。} 目标是从视频关键点序列中自动定位 IC 帧和 MKF 帧。我们实现了三种基线方法：（1）\textbf{基于规则的方法}：利用踝关节 $y$ 坐标的一阶导数过零点检测 IC 帧，利用膝关节角度的极小值检测 MKF 帧；（2）\textbf{多层感知机（MLP）}：以滑动窗口内的关键点坐标为输入，逐帧预测是否为关键帧（二分类）；（3）\textbf{长短期记忆网络（LSTM）}：以完整试验的关键点序列为输入，逐帧输出关键帧概率。评估指标为预测帧与标注帧之间的绝对帧误差（$|\Delta f|$），以及帧误差 $\leq$1 帧和 $\leq$3 帧的准确率。
+
+  \textbf{任务二：自动 LESS 评分。} 目标是从 IC 帧和 MKF 帧处的双视角关键点特征预测 17 个 LESS 单项评分。我们实现了两种基线方法：（1）\textbf{随机森林（RF）}：以 IC 和 MKF 帧处的关节角度、关节间距等手工特征为输入，对每个指标独立训练分类器；（2）\textbf{多任务 MLP}：以 IC 和 MKF 帧处的正面与矢状面关键点坐标拼接为输入，共享隐藏层后分 17 个输出头进行多任务学习。评估指标包括：单项评分准确率（Item Accuracy）、17 项平均准确率（Mean Item Accuracy）、总分平均绝对误差（Total Score MAE）以及风险等级分类准确率。
+
+  \textbf{任务三：风险等级分类。} 目标是将 LESS 总分映射为四级风险类别（优秀/良好/中等/较差）。在任务二预测的总分基础上按阈值划分，同时作为独立分类任务训练 \textbf{支持向量机（SVM）} 和上述 \textbf{多任务 MLP} 的分类变体，报告四分类准确率和加权 F1 分数。
+
+  基准结果汇总于表~\ref{tab:baseline_keyframe} 和表~\ref{tab:baseline_scoring}。
+
+  \begin{table}[htbp]
+    \centering
+    \caption{关键帧检测基准结果。$|\Delta f|$ 为预测帧与标注帧的平均绝对帧误差。}
+    \label{tab:baseline_keyframe}
+    \begin{tabular}{lccccc}
+      \toprule
+      \multirow{2}{*}{\textbf{方法}} & \multicolumn{2}{c}{\textbf{IC 帧}} & \multicolumn{2}{c}{\textbf{MKF 帧}} \\
+      \cmidrule(lr){2-3} \cmidrule(lr){4-5}
+      & $|\Delta f|$ & $\leq$3 帧 (\%) & $|\Delta f|$ & $\leq$3 帧 (\%) \\
+      \midrule
+      基于规则 & $x.x$ & $xx.x$ & $x.x$ & $xx.x$ \\
+      MLP & $x.x$ & $xx.x$ & $x.x$ & $xx.x$ \\
+      LSTM & $x.x$ & $xx.x$ & $x.x$ & $xx.x$ \\
+      \bottomrule
+    \end{tabular}
+  \end{table}
+
+  \begin{table}[htbp]
+    \centering
+    \caption{自动 LESS 评分基准结果。}
+    \label{tab:baseline_scoring}
+    \begin{tabular}{lcccc}
+      \toprule
+      \textbf{方法} & \textbf{平均单项准确率 (\%)} & \textbf{总分 MAE} & \textbf{风险等级准确率 (\%)} & \textbf{加权 F1} \\
+      \midrule
+      RF & $xx.x$ & $x.x$ & $xx.x$ & $0.xx$ \\
+      多任务 MLP & $xx.x$ & $x.x$ & $xx.x$ & $0.xx$ \\
+      SVM（分类） & --- & --- & $xx.x$ & $0.xx$ \\
+      \bottomrule
+    \end{tabular}
+  \end{table}
+
+  基准代码、训练配置和预训练权重均随数据集发布于 \texttt{code/} 目录，研究人员可直接复现上述结果。需要强调的是，上述基线采用最简模型架构和默认超参数，未进行系统调优，旨在提供可复现的性能下界而非最优解。更复杂的时序模型（如 Transformer）、多视角融合策略以及端到端视频模型等均为值得探索的改进方向。
+
+  \subsection*{已知局限性}
+
+  使用此数据集时应考虑几个局限性。首先，约 200 名受试者的样本量小于基于军校学员的大规模研究（Padua 等人\textsuperscript{11}的 2,691 名、Eckard 等人\textsuperscript{32}的 2,235 名），但 LESS-200 的设计目标是评分分布广度而非样本量最大化——通过运动水平分层采样实现了 0--19 分范围的充分覆盖，而军校学员群体由于体能水平相对均一，评分分布可能集中在中低分区间。其次，所有受试者均从单所大学招募，限制了地理和人群代表性；然而，样本内的运动类型、运动水平和性别多样性提供了内部异质性，且开源的 RecSync 和 LESS-Annotator 工具使其他团队能够在不同场所和人群中复制采集并扩展数据集。第三，软件同步未达到硬件锁相精度，但验证表明帧级精度满足 LESS 评估要求。第四，关键点数据是算法估计而非光学跟踪的基本事实，定位为提供准确性验证的便利数据。第五，LESS 评分遵循 Padua 等人（2009）的原始 17 项版本\textsuperscript{11}，未包含 Eckard 等人\textsuperscript{32}提出的 LESS-22 扩展指标（如不对称负荷、膝关节摇摆等 5 项新增指标），这是为了与绝大多数现有文献保持可比性。
+
+% ============================================================
+% 代码可用性
+% ============================================================
+  \section*{代码可用性}
+
+  支持此数据集的完整工具链公开可用：
+
+  \begin{itemize}[nosep]
+\item \textbf{RecSync}：多设备同步视频录制系统。GitHub: https://github.com/wangyongxuan2019/RecSync-Multiplatform
+\item \textbf{LESS-Annotator}：专门构建的 LESS 专家标注系统。GitHub: https://github.com/wangyongxuan2019/LessAnnotation
+\item \textbf{LESS-200 Code}：数据加载、可视化和基准模型。GitHub: [URL]
+  \end{itemize}
+
+  这三个工具共同覆盖了从采集到标注再到使用的端到端流程。这意味着 LESS-200 不仅是一个静态数据资源，还是一个可复制、可扩展的数据生产流程——其他团队可以使用 RecSync 在不同场所和人群中收集新数据，使用 LESS-Annotator 进行标准化标注，然后将新数据与 LESS-200 合并，构建更大规模的基准。这种"工具链 + 数据集"开源模式代表了 LESS-200 与现有 LESS 研究的根本区别。
+
+% ============================================================
+% 致谢
+% ============================================================
+  \section*{致谢}
+
+  感谢所有参与本研究数据采集的受试者，以及参与标注工作的评分者。本研究得到\_\_\_基金（编号：\_\_\_）的资助。
+
+% ============================================================
+% 作者贡献
+% ============================================================
+  \section*{作者贡献}
+
+  使用 CRediT 分类法声明各作者贡献。王永选：概念化、方法学、软件开发、数据管理、论文撰写——原稿。作者二：\_\_\_。作者三：\_\_\_。作者四：项目管理、论文撰写——审阅与编辑、经费获取。所有作者均审阅并批准了最终稿件。
+
+% ============================================================
+% 利益冲突声明
+% ============================================================
+  \section*{利益冲突声明}
+
+  作者声明不存在利益冲突。
+
+% ============================================================
+% 参考文献
+% ============================================================
+  \begin{thebibliography}{99}
+
+    \bibitem{ref1} Sanders, T. L., Maradit Kremers, H., Stuart, M. J., et al. Incidence of anterior cruciate ligament tears and reconstruction: a 21-year population-based study. \textit{Am. J. Sports Med.} \textbf{44}, 1502--1507 (2016).
+
+    \bibitem{ref2} Montalvo, A. M., Schneider, D. K., Yut, L., et al. ``What's my risk of sustaining an ACL injury while playing sports?'' A systematic review with meta-analysis. \textit{Br. J. Sports Med.} \textbf{53}, 1003--1012 (2019).
+
+    \bibitem{ref3} Herzog, M. M., Marshall, S. W., Lund, J. L., et al. Cost of outpatient arthroscopic anterior cruciate ligament reconstruction among commercially insured patients in the United States, 2005--2013. \textit{Orthop. J. Sports Med.} \textbf{5}, 2325967116684776 (2017).
+
+    \bibitem{ref4} Wiggins, A. J., Grandhi, R. K., Schneider, D. K., et al. Risk of secondary injury in younger athletes after anterior cruciate ligament reconstruction: a systematic review and meta-analysis. \textit{Am. J. Sports Med.} \textbf{44}, 1861--1876 (2016).
+
+    \bibitem{ref5} Luc, B., Gribble, P. A. \& Pietrosimone, B. G. Osteoarthritis prevalence following anterior cruciate ligament reconstruction: a systematic review and numbers-needed-to-treat analysis. \textit{J. Athl. Train.} \textbf{49}, 806--819 (2014).
+
+    \bibitem{ref6} Prodromos, C. C., Han, Y., Rogowski, J., et al. A meta-analysis of the incidence of anterior cruciate ligament tears as a function of gender, sport, and a knee injury--reduction regimen. \textit{Arthroscopy} \textbf{23}, 1320--1325 (2007).
+
+    \bibitem{ref7} Arendt, E. \& Dick, R. Knee injury patterns among men and women in collegiate basketball and soccer: NCAA data and review of literature. \textit{Am. J. Sports Med.} \textbf{23}, 694--701 (1995).
+
+    \bibitem{ref8} Hewett, T. E., Myer, G. D., Ford, K. R., et al. Biomechanical measures of neuromuscular control and valgus loading of the knee predict anterior cruciate ligament injury risk in female athletes: a prospective study. \textit{Am. J. Sports Med.} \textbf{33}, 492--501 (2005).
+
+    \bibitem{ref9} Sugimoto, D., Myer, G. D., Foss, K. D., et al. Specific exercise effects of preventive neuromuscular training intervention on anterior cruciate ligament injury risk reduction in young females: meta-analysis and subgroup analysis. \textit{Br. J. Sports Med.} \textbf{49}, 282--289 (2015).
+
+    \bibitem{ref10} Webster, K. E. \& Hewett, T. E. Meta-analysis of meta-analyses of anterior cruciate ligament injury reduction training programs. \textit{J. Orthop. Res.} \textbf{36}, 2696--2708 (2018).
+
+    \bibitem{ref11} Padua, D. A., Marshall, S. W., Boling, M. C., et al. The Landing Error Scoring System (LESS) is a valid and reliable clinical assessment tool of jump-landing biomechanics. \textit{Am. J. Sports Med.} \textbf{37}, 1996--2002 (2009).
+
+    \bibitem{ref12} Padua, D. A., DiStefano, L. J., Beutler, A. I., et al. The Landing Error Scoring System as a screening tool for an anterior cruciate ligament injury--prevention program in elite-youth soccer athletes. \textit{J. Athl. Train.} \textbf{50}, 589--595 (2015).
+
+    \bibitem{ref13} Onate, J. A., Cortes, N., Welch, C., et al. Expert versus novice interrater reliability and criterion validity of the Landing Error Scoring System. \textit{J. Sport Rehabil.} \textbf{19}, 41--56 (2010).
+
+    \bibitem{ref14} Deng, J., Dong, W., Socher, R., et al. ImageNet: a large-scale hierarchical image database. In \textit{Proc. IEEE Conf. Comput. Vis. Pattern Recognit.} 248--255 (2009).
+
+    \bibitem{ref15} Lin, T. Y., Maire, M., Belongie, S., et al. Microsoft COCO: common objects in context. In \textit{Proc. Eur. Conf. Comput. Vis.} 740--755 (2014).
+
+    \bibitem{ref16} Mauntel, T. C., Padua, D. A., Stanley, L. E., et al. Automated quantification of the Landing Error Scoring System with a markerless motion-capture system. \textit{J. Athl. Train.} \textbf{52}, 1002--1009 (2017).
+
+    \bibitem{ref17} Lugaresi, C., Tang, J., Nash, H., et al. MediaPipe: a framework for building perception pipelines. \textit{arXiv preprint} arXiv:1906.08172 (2019).
+
+    \bibitem{ref18} Mills, D. L. Internet time synchronization: the network time protocol. \textit{IEEE Trans. Commun.} \textbf{39}, 1482--1493 (1991).
+
+    \bibitem{ref19} Clar, C., Sengoku, H., Witte, K., et al. Reducing ACL injury risk: a meta-analysis of prevention programme effectiveness. \textit{Knee Surg. Sports Traumatol. Arthrosc.} (2025). https://doi.org/10.1007/s00167-025-08456-y
+
+    \bibitem{ref20} Nuri, L., Reza Kordi, M., Iranpour, F., et al. Neuromuscular training for preventing knee injuries in female team athletes: a meta-analysis. \textit{Ann. Med.} \textbf{57}, 2581891 (2025).
+
+    \bibitem{ref21} Turner, J. A., Reiche, E. T., Hartshorne, M. T., et al. Open source, open science: development of OpenLESS as the automated Landing Error Scoring System. \textit{J. Athl. Train.} (2025). https://doi.org/10.4085/1062-6050-0666.24
+
+    \bibitem{ref22} Conoscenti, M., Buzzichelli, C., Romagnoli, C., et al. Commercial vision sensors and AI-based pose estimation frameworks for markerless motion analysis in sports and exercises: a mini review. \textit{Front. Physiol.} \textbf{16}, 1649330 (2025).
+
+    \bibitem{ref23} Zheng, Y., Liu, Y., Wang, Z., et al. A comprehensive analysis of machine learning pose estimation models used in human movement and posture analyses: a narrative review. \textit{Heliyon} \textbf{10}, e39821 (2024).
+
+    \bibitem{ref24} Farinelli, V., Aquino, G., Gianola, S., et al. Landing error scoring system: a scoping review about variants, reference values and differences according to sex and sport. \textit{Phys. Ther. Sport} \textbf{68}, 11--20 (2024).
+
+    \bibitem{ref25} Cao, Z., Hidalgo, G., Simon, T., Wei, S.-E. \& Sheikh, Y. OpenPose: Realtime multi-person 2D pose estimation using part affinity fields. \textit{IEEE Trans. Pattern Anal. Mach. Intell.} \textbf{43}, 172--186 (2021).
+
+    \bibitem{ref26} Andriluka, M., Iqbal, U., Insafutdinov, E., et al. PoseTrack: A benchmark for human pose estimation and tracking. In \textit{Proc. IEEE Conf. Comput. Vis. Pattern Recognit.} 5167--5176 (2018).
+
+    \bibitem{ref27} Kay, W., Carreira, J., Simonyan, K., et al. The Kinetics human action video dataset. \textit{arXiv preprint} arXiv:1705.06950 (2017).
+
+    \bibitem{ref28} IEEE. IEEE Standard for a Precision Clock Synchronization Protocol for Networked Measurement and Control Systems. \textit{IEEE Std. 1588-2008} (2008).
+
+    \bibitem{ref29} Mehta, D., Sotnychenko, O., Mueller, F., et al. XNect: Real-time multi-person 3D motion capture with a single RGB camera. \textit{ACM Trans. Graph.} \textbf{39}(4), Article 82 (2020).
+
+    \bibitem{ref30} Hebert-Losier, K., Hanzlikova, I., Zheng, C., Streeter, L. \& Mayo, M. The DEEP LESS: automated Landing Error Scoring System using deep learning. \textit{Appl. Sci.} \textbf{10}, 892 (2020).
+
+    \bibitem{ref31} Cameron, K. L., Peck, K. Y., Davi, S. M., et al. Landing Error Scoring System items are associated with stress fracture incidence in United States Military Academy cadets. \textit{Orthop. J. Sports Med.} \textbf{10}, 23259671221100790 (2022).
+
+    \bibitem{ref32} Eckard, T. G., Miraldi, S. F. P., Peck, K. Y., et al. Automated Landing Error Scoring System and bone stress injury incidence in cadets at the United States Military Academy. \textit{J. Athl. Train.} \textbf{57}, 379--385 (2022).
+
+  \end{thebibliography}
+
+\end{document}

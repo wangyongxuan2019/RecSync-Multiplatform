@@ -1,0 +1,564 @@
+% LESS-200: Scientific Data - Data Descriptor
+% For submission to Scientific Data (Nature Portfolio)
+% Format: Data Descriptor
+
+\documentclass[12pt]{article}
+
+% ============================================================
+% Packages
+% ============================================================
+\usepackage[margin=2.5cm]{geometry}
+\usepackage{times}
+\usepackage{graphicx}
+\usepackage{amsmath}
+\usepackage{amssymb}
+\usepackage{hyperref}
+\usepackage{lineno}
+\usepackage[super,sort&compress]{natbib}
+\usepackage{booktabs}
+\usepackage{multirow}
+\usepackage{tabularx}
+\usepackage{float}
+\usepackage{xcolor}
+\usepackage{url}
+\usepackage{siunitx}
+\usepackage{enumitem}
+\usepackage{forest}
+
+% Line numbering (required for submission)
+\linenumbers
+
+% Hyperref settings
+\hypersetup{
+  colorlinks=true,
+  linkcolor=blue,
+  citecolor=blue,
+  urlcolor=blue
+}
+
+% ============================================================
+% Title and Authors
+% ============================================================
+\title{LESS-200: A Synchronized Dual-View Video Dataset with Fine-Grained Annotations for Automated Landing Error Scoring}
+
+\author{
+  Yongxuan Wang\textsuperscript{1},
+  Author Two\textsuperscript{2},
+  Author Three\textsuperscript{3},
+  Author Four\textsuperscript{*}
+}
+
+\date{}
+
+\begin{document}
+
+  \maketitle
+
+% Affiliations
+  \noindent
+  \textsuperscript{1}Shandong Sport University, Jinan, Shandong, China \\
+  \textsuperscript{*}Correspondence: wangyongxuan@sdpei.edu.cn
+
+% ============================================================
+% Abstract
+% ============================================================
+  \begin{abstract}
+    \noindent
+    The Landing Error Scoring System (LESS) is a validated clinical tool that screens anterior cruciate ligament injury risk via dual-view video assessment of jump-landing biomechanics, yet its automation has been hindered by the absence of public benchmark datasets. We present LESS-200, the first publicly available large-scale LESS dataset comprising synchronized dual-view (frontal and sagittal) video recordings of approximately 200 participants (five trials each, yielding approximately 1,000 valid trial sets) performing the standardized Drop Vertical Jump. The dataset provides frame-level keyframe annotations (initial contact and maximum knee flexion), expert LESS scores for all 17 biomechanical indicators, and pre-extracted 2D pose estimation data. Participants span multiple sports (basketball, volleyball, badminton) and athletic levels (national to recreational) with balanced sex distribution. Data were collected using RecSync, an open-source software-based synchronization system, and annotated using LESS-Annotator, a purpose-built annotation tool. The complete pipeline from acquisition to annotation is openly available, enabling reproduction and extension. LESS-200 serves as a standardized benchmark for automated LESS scoring, keyframe detection, and sport biomechanics research.
+  \end{abstract}
+
+% Keywords
+  \noindent\textbf{Keywords:} Landing Error Scoring System; anterior cruciate ligament; dual-view video; pose estimation; sports injury screening; open dataset
+
+% ============================================================
+% Background & Summary
+% ============================================================
+  \section*{Background \& Summary}
+
+  Anterior cruciate ligament (ACL) injury is the most common serious knee injury among young athletic populations, with an estimated 100,000 to 200,000 cases annually in the United States alone\textsuperscript{1,2} and lifetime economic burdens of \$60,000 to \$170,000 per injury when rehabilitation, lost productivity, and long-term joint degeneration are considered\textsuperscript{3}. Approximately 20--25\% of young athletes sustain secondary ACL injuries within five years of returning to sport\textsuperscript{4}, and 50--70\% develop knee osteoarthritis within 10 to 20 years regardless of surgical intervention\textsuperscript{5}. ACL injuries are concentrated in sports involving jump-landing and cutting maneuvers, with female athletes exhibiting 2- to 4-fold higher incidence rates\textsuperscript{6,7}---a disparity attributed primarily to neuromuscular control differences\textsuperscript{8}. Targeted neuromuscular training can reduce ACL injury risk by approximately 50\%\textsuperscript{9,10,19,20}, but intervention requires screening: identifying individuals with poor landing biomechanics within large athletic populations. This focuses the challenge on tools that must simultaneously satisfy assessment accuracy and large-scale feasibility.
+
+  The Landing Error Scoring System (LESS) was designed to address precisely this need. When Padua et al. (2009) introduced the system\textsuperscript{11}, its core design philosophy was that \textbf{standardized landing biomechanical assessment could be accomplished using only dual-view video}, without force plates, motion capture systems, or other expensive laboratory equipment. In the LESS protocol, participants perform a Drop Vertical Jump (DVJ) from a 30\,cm box, and raters evaluate 17 biomechanical indicators---spanning knee, hip, trunk, and foot postures assessed at initial contact (IC), maximum knee flexion (MKF), or during the IC-to-MKF transition---through frontal and sagittal video playback, assigning scores of 0/1 or 0/1/2 per item for a total range of 0--19. The original validation study in 2,691 military cadets demonstrated strong inter-rater reliability (ICC = 0.84) and intra-rater reliability (ICC = 0.91), with significant correlations between LESS total scores and three-dimensional kinematic and kinetic variables\textsuperscript{11}. A subsequent prospective study by Padua et al. (2015) in 1,564 elite youth soccer athletes further established the predictive validity of LESS, finding that individuals with total scores $\geq$5 had significantly elevated ACL injury risk\textsuperscript{12}.
+
+  Despite its clinical promise, LESS faces two structural bottlenecks that limit widespread adoption. The first is efficiency: although LESS was designed as a ``simple screening tool,'' raters must still analyze dual-view video frame by frame, locating IC and MKF frames and judging 17 items at each, with trained raters requiring approximately 8 minutes per assessment\textsuperscript{11}. For campus-wide athletic screenings or community-level programs involving hundreds of individuals, manual assessment is infeasible in terms of both time and personnel---Cameron et al.\textsuperscript{31} item-level manual scoring of 1,772 military cadets exemplifies this workload. The second is consistency: several LESS items (e.g., degree of knee valgus, foot pronation) depend on the rater's subjective visual judgment, and inter-rater agreement rates for some items fall below 70\%\textsuperscript{13}, particularly for borderline cases. Both bottlenecks point to the same solution: automating LESS scoring through computer vision and deep learning---machines do not fatigue, and they produce identical outputs for identical inputs.
+
+  Several studies have attempted to automate LESS scoring (Table~\ref{tab:comparison}), but each approach has limitations. Mauntel et al.\textsuperscript{16} pioneered automated scoring of 21 LESS items using a Microsoft Kinect depth camera with proprietary PhysiMax software; Eckard et al.\textsuperscript{32} scaled this approach to 2,235 military cadets, but the Kinect has been discontinued and PhysiMax remains closed-source, limiting reproducibility. Hebert-Losier et al.\textsuperscript{30} pursued a pure video approach, using OpenPose to extract 2D pose keypoints from dual-view video and predicting LESS total scores via random forest regression (MAE = 1.23), demonstrating the feasibility of open-source pose estimation for automated scoring, but addressed only total scores rather than item-level prediction. Most recently, Turner et al.\textsuperscript{21} developed OpenLESS---an open-source automated LESS system based on OpenCap smartphone-based 3D motion capture---processing 353 trials in under 25 minutes versus approximately 35 hours of manual expert scoring, achieving item-level automated scoring with open-source code.
+
+  However, these automated approaches, while advancing the algorithmic front, are collectively constrained by a more fundamental problem: the lack of publicly available, standardized benchmark datasets. As summarized in Table~\ref{tab:comparison}, seven LESS-related studies spanning 16 years have all used private datasets, meaning that different algorithms cannot be fairly compared on the same data. These private datasets also exhibit structural differences: Padua et al.\textsuperscript{11} and Hebert-Losier et al.\textsuperscript{30} provide only total score annotations, precluding item-level automated scoring research; Eckard et al.\textsuperscript{32} used a single-view Kinect depth camera inconsistent with the dual-view LESS standard; and only OpenLESS\textsuperscript{21} has open-sourced its code, though its dataset is available only upon request and limited in scale (92 participants). For deep learning approaches, the absence of a public benchmark means that no comparable evaluation standard exists---a stark contrast with the paradigm in computer vision, where open datasets such as ImageNet\textsuperscript{14}, COCO\textsuperscript{15}, and Kinetics\textsuperscript{27} have driven algorithmic progress through standardized benchmarks.
+
+  LESS-200 is designed to fill this gap. Compared with existing datasets (Table~\ref{tab:comparison}), it is the first LESS dataset that simultaneously satisfies all of the following criteria: fully publicly accessible (not merely available upon request); large-scale (approximately 200 participants $\times$ 5 trials $\approx$ 1,000 trial sets); LESS-standard dual-view synchronized video; frame-level keyframe annotations and 17-item expert LESS scores (not total scores only); and pre-extracted 2D pose estimation data. Participants span multiple sport disciplines (basketball, volleyball, badminton) and athletic levels (from national-level athletes to recreational students), with balanced sex distribution. This stratified design ensures adequate score coverage across the full 0--19 LESS range, avoiding the score distribution skew that results from sampling single population subgroups such as military cadets\textsuperscript{11,31,32} or single-sport cohorts\textsuperscript{12}.
+
+  Critically, the entire data collection and annotation workflow for LESS-200 is based on consumer-grade high-definition cameras and two purpose-built, open-source tools: RecSync, a software-based multi-device synchronized video recording system, and LESS-Annotator, a specialized expert annotation system for the LESS scoring workflow. This design choice is deliberate and aligned with the clinical philosophy of LESS itself\textsuperscript{11}: prior approaches relying on Kinect depth cameras and proprietary PhysiMax software\textsuperscript{16,32} have become difficult to reproduce due to hardware discontinuation and closed-source software; if dataset collection required laboratory-grade equipment such as Vicon motion capture or hardware genlock synchronization, it would contradict the low-cost, video-only premise that makes LESS clinically valuable, and would render the dataset impractical for other research groups to reproduce and extend. The dataset, collection tools, and annotation tools are all released as open source, constituting an end-to-end reproducible pipeline from acquisition through annotation to usage.
+
+  \begin{table}[htbp]
+    \centering
+    \caption{Comparison of LESS-200 with existing LESS-related datasets. All prior datasets remain private or available only upon request, and lack open-source toolchains.}
+    \label{tab:comparison}
+    \footnotesize
+    \resizebox{\textwidth}{!}{%
+      \begin{tabular}{llcccccc}
+        \toprule
+        \textbf{Dataset} & \textbf{N (Subj./Trials)} & \textbf{Views} & \textbf{Sync} & \textbf{Pose} & \textbf{Annotation} & \textbf{Open} & \textbf{Public} \\
+        \midrule
+        Padua 2009\textsuperscript{11} & 2,691 / $\sim$8,073 & Dual & HW & --- & Total score & No & No \\
+        Onate 2010\textsuperscript{13} & 19 / $\sim$57 & Dual & HW & --- & Item-level & No & No \\
+        Mauntel 2017\textsuperscript{16} & 57 / 171 & Dual + Kinect & HW & Kinect & Item-level & No & No \\
+        Hebert-Losier 2020\textsuperscript{30} & 144 / 320 & Dual & HW & OpenPose & Total score & No & No \\
+        Cameron 2022\textsuperscript{31} & 1,772 / $\sim$5,316 & Dual & HW & --- & Item-level & No & No \\
+        Eckard 2022\textsuperscript{32} & 2,235 / $\sim$6,705 & Single (Kinect) & --- & PhysiMax & Item-level & No & No \\
+        Turner 2025\textsuperscript{21} & 92 / 353 & Dual (phones) & SW & OpenCap & Item-level & Code & On req. \\
+        \textbf{LESS-200 (Ours)} & \textbf{$\sim$200 / $\sim$1,000} & \textbf{Dual} & \textbf{SW} & \textbf{MediaPipe} & \textbf{Keyframe+Item} & \textbf{Full} & \textbf{Yes} \\
+        \bottomrule
+      \end{tabular}%
+    }
+  \end{table}
+
+% ============================================================
+% Methods
+% ============================================================
+  \section*{Methods}
+
+  \subsection*{Participants}
+
+  Approximately 200 participants were recruited from the student body of Shandong Sport University. The sample design prioritized breadth of LESS score distribution rather than maximizing sample size, as score distribution breadth directly determines whether the dataset can effectively support the development and evaluation of automated LESS scoring models.
+
+  As a specialized sport university, Shandong Sport University provides access to participants spanning national first-tier and second-tier athletes as well as general sport-major students, offering a complete athletic level gradient with good representativeness. Based on this advantage, the study adopted an athletic-level-stratified sampling strategy. Athletes with systematic sport-specific training typically exhibit superior landing biomechanics characterized by greater knee and hip flexion angles and more stable trunk control, corresponding to lower LESS scores; by contrast, general students without sport-specific training are more likely to display stiff landing patterns and knee valgus, corresponding to higher LESS scores. By including the full athletic level gradient from nationally ranked athletes to recreational students, the dataset achieves adequate coverage across both high-score and low-score ranges, effectively mitigating class imbalance.
+
+  Furthermore, participants come from multiple sport disciplines, further enriching the diversity of landing movement patterns. For example, basketball and volleyball athletes develop differentiated landing strategies due to sport-specific technical demands, and this cross-sport movement variability helps improve the generalizability of automated scoring models.
+
+  Inclusion criteria were: age 18--30 years; ability to independently perform the Drop Vertical Jump (DVJ) test; regular exercise or training within the preceding 6 months; no acute lower-extremity injury within the preceding 6 months; and voluntary provision of written informed consent. Exclusion criteria were: prior ACL injury or reconstruction; lower-extremity fracture, ligament tear, or meniscal injury within the preceding 12 months; cardiovascular or neuromuscular disease; body mass index (BMI) $>$ 30\,kg/m\textsuperscript{2}; and self-reported physical discomfort on the test day. The study was approved by the Institutional Ethics Committee of Shandong Sport University (Approval No.: \_\_\_\_).
+
+  \subsection*{Experimental Setup}
+
+  Equipment selection followed two principles: alignment with the clinical positioning of LESS as a low-cost, video-only screening tool\textsuperscript{11}, and reproducibility using consumer-grade hardware (see Background \& Summary).
+
+  Two high-definition cameras (model: \_\_\_) were positioned in the frontal plane (frontal view) and sagittal plane (sagittal view), consistent with the two viewing angles defined in the LESS standard. Both cameras recorded at 1920$\times$1080 resolution and 60\,fps, positioned 3--4\,m from the jump box at a height of 0.8--1.0\,m (approximately knee height). The testing venue featured a flat, non-slip sports floor with a light-colored, uniform background wall to maximize body-background contrast (directly affecting subsequent pose estimation accuracy), uniform illumination (500--1000\,lux) to avoid shadow artifacts, and a standard 30\,cm jump box (LESS protocol). The experimental layout is illustrated in Figure~\ref{fig:setup}.
+
+  \begin{figure}[htbp]
+    \centering
+% TODO: Insert experimental layout photograph or schematic diagram
+    \fbox{\parbox{0.8\textwidth}{\centering\vspace{3cm}\textit{[Experimental layout photograph/schematic to be inserted]}\vspace{3cm}}}
+    \caption{Experimental layout showing the dual-camera positioning relative to the jump box. The frontal camera captures the coronal plane and the sagittal camera captures the sagittal plane, positioned 3--4\,m from the jump box at approximately knee height.}
+    \label{fig:setup}
+  \end{figure}
+
+  Video synchronization used RecSync (see Dual-View Synchronization section) and annotation used LESS-Annotator (see Expert Annotation section).
+
+  \subsection*{Dual-View Synchronization (RecSync)}
+
+  Frame-level synchronization between the two camera views is a prerequisite for data quality rather than an optional feature. Among the 17 LESS items, several require simultaneous assessment of frontal and sagittal information at the same time point: for example, evaluating knee status at IC requires the sagittal view to judge flexion angle (Item 1) and the frontal view to assess valgus (Item 5). If the two views are unsynchronized, raters or automated algorithms observe postures from different physical moments, leading to scoring errors. Additionally, IC and MKF frame annotation depends on dual-view consistency---the sagittal view is used to track joint angle changes while the frontal view confirms foot-ground contact timing, and both must correspond to the same physical instant.
+
+  RecSync achieves purely software-based frame-level synchronization through three coordinated mechanisms. First, \textbf{SNTP clock synchronization}: the system uses a Leader-Client architecture connected via wired local area network. Clients periodically exchange SNTP timestamps with the Leader, computing clock offset using the four-timestamp model\textsuperscript{18}. While hardware-based synchronization protocols such as IEEE 1588-2008 (Precision Time Protocol, PTP) can achieve sub-microsecond accuracy\textsuperscript{28}, they require dedicated hardware and specialized network infrastructure. SNTP provides a software-only alternative that achieves sufficient accuracy for LESS assessment applications while maintaining the low-cost, consumer-grade hardware premise of the dataset.
+  \begin{equation}
+    \text{Offset} = \frac{(t_2 - t_1) + (t_3 - t_4)}{2}
+  \end{equation}
+  where $t_1$ and $t_4$ are Client-side timestamps and $t_2$ and $t_3$ are Leader-side timestamps. Network asymmetry and transient jitter introduce errors in single-sample offset estimates; therefore, the system continuously collects 30 SNTP samples, sorts them by round-trip time (RTT) in ascending order, and averages the offsets of the top 30\% of samples (lowest RTT)---samples with minimal RTT represent the most symmetric network paths and smallest jitter, yielding the most reliable offset estimates. Automatic resynchronization is triggered every 10 minutes to compensate for clock drift due to crystal oscillator frequency differences.
+
+  Second, \textbf{preset trigger time}: rather than broadcasting an ``immediate start'' command (where network latency differences between Clients introduce synchronization errors), the Leader computes a future time point $\text{triggerTime} = \text{currentTime} + 200\,\text{ms}$ and broadcasts it to all Clients, which convert this time to their local time domains and wait for the trigger. The 200\,ms buffer far exceeds typical LAN single-trip delay ($<$1\,ms), ensuring all Clients receive the command before the trigger moment. This mechanism completely eliminates network transmission latency uncertainty from the synchronization error, making accuracy depend solely on clock synchronization quality.
+
+  Third, \textbf{soft recording mode}: cameras continuously capture frames with synchronized timestamps from system startup, and the recorder is pre-initialized with encoder warm-up completed. Frame writing begins only when the frame timestamp $\geq$ triggerTime. In traditional ``hard recording'' mode, recorder initialization upon receiving the record command introduces device-dependent delays of milliseconds to tens of milliseconds---non-negligible at frame-level synchronization. Soft recording decouples ``when capture starts'' from ``when writing starts,'' ensuring first-frame timing depends only on clock synchronization and frame capture interval rather than hardware initialization speed.
+
+  The three mechanisms working together yield a theoretical synchronization accuracy of:
+  \begin{equation}
+    |t_{\text{start}}^A - t_{\text{start}}^B| \leq \frac{1}{\text{fps}} + \sigma_{\text{SNTP}} \approx 18\text{--}22\,\text{ms} \quad (60\,\text{fps})
+  \end{equation}
+  where $\sigma_{\text{SNTP}}$ denotes the residual clock offset uncertainty after SNTP synchronization (typically 1--5\,ms on a wired LAN). Empirical validation is presented in the Technical Validation section. RecSync is released as open-source software at \href{https://github.com/wangyongxuan2019/RecSync-Multiplatform}{RecSync-Multiplatform}.
+
+  \subsection*{Data Acquisition Protocol}
+
+  Data collection strictly followed the standardized LESS DVJ protocol\textsuperscript{11}: participants stood on the 30\,cm jump box with feet shoulder-width apart, jumped forward off the box (not for distance), landed simultaneously on both feet, and immediately performed a maximum-effort vertical jump followed by a natural landing. Two verbal instructions were emphasized: ``jump back up immediately upon landing'' (ensuring landing action continuity and reactivity, which constitutes the core observation window for LESS assessment) and ``jump as high as you can'' (ensuring maximum effort rather than deliberate landing posture control, which would produce artificially low scores not reflecting true neuromuscular control patterns).
+
+  Each participant completed 5 valid trials with 30-second rest intervals. The five-repetition design serves dual purposes: providing within-subject trial-to-trial variability information (reflecting movement stability) and generating additional training samples for downstream research. Trials were excluded and repeated when: a single foot landed first; no reactive jump or noticeably delayed reactive jump occurred; recording equipment failure or synchronization anomaly was detected; or obvious movement error occurred.
+
+  The recording workflow followed a standardized sequence: set participant ID on the Leader $\rightarrow$ confirm both Clients connected and synchronized $\rightarrow$ verbal cue $\rightarrow$ click ``Start Recording'' on Leader $\rightarrow$ participant completes the action ($\sim$3--5 seconds) $\rightarrow$ click ``Stop Recording'' on Leader $\rightarrow$ playback quality check $\rightarrow$ trial number auto-increment. Files were named following the convention: \texttt{\{view\}\_\{subjectID\}\_\{taskID\}\_\{timestamp\}\_\{epoch\}.mp4}.
+
+  \subsection*{Pose Estimation}
+
+  Two-dimensional pose estimation was performed on all videos using MediaPipe BlazePose\textsuperscript{17}, extracting 33 body keypoints per frame with normalized 2D coordinates and confidence scores. In LESS automation research, pose estimation has been demonstrated as a viable technical approach: Hebert-Losier et al.\textsuperscript{30} used OpenPose\textsuperscript{25} to extract 2D keypoints from dual-view video and successfully predicted LESS total scores; Turner et al.\textsuperscript{21} achieved smartphone-based 3D kinematic estimation via OpenCap. This dataset chose MediaPipe over OpenPose due to its higher inference efficiency on consumer-grade devices, greater number of keypoints (33 vs. 25), and recent reviews confirming its reliability as a low-cost alternative to laboratory-grade motion capture\textsuperscript{22,23}. Providing pre-extracted pose data serves to lower the technical barrier for downstream research: pose estimation is an independent technical step involving model selection, parameter tuning, and deployment, and requiring each dataset user to complete this step independently not only duplicates effort but also renders results incomparable when different researchers employ different estimation approaches. By pre-extracting and uniformly releasing keypoint data, researchers can directly use keypoint sequences to train LESS scoring models, focusing their efforts on scoring algorithm development.
+
+  Detection failure frames were marked with zero confidence without interpolation, preserving raw detection states. This design was intentional: different interpolation strategies introduce different biases, and the dataset provider selecting a particular interpolation method would constrain user flexibility. Retaining original detection results and allowing researchers to choose processing strategies according to their needs is the more responsible approach. Pose estimation quality is validated in the Technical Validation section.
+
+  \subsection*{Expert Annotation (LESS-Annotator)}
+
+  Expert annotation was performed using LESS-Annotator, a purpose-built open-source annotation system designed specifically for the LESS scoring workflow. The system integrates dual-view synchronized video playback, frame-by-frame and second-by-second navigation, one-click keyframe marking, and a 17-item scoring panel. Its principal advantage over general-purpose annotation tools is the codification of the complete LESS scoring procedure---locate IC frame $\rightarrow$ evaluate IC-moment items $\rightarrow$ locate MKF frame $\rightarrow$ evaluate MKF-moment items $\rightarrow$ evaluate IC-to-MKF transition items $\rightarrow$ overall impression scoring---into a guided workflow that ensures every rater completes all scoring items in the same sequence, reducing omissions and order effects.
+
+  Annotation personnel comprised $x$ raters with backgrounds in sports medicine or exercise science. Training followed a structured protocol: systematic LESS scoring criteria instruction $\rightarrow$ standard video example discussion $\rightarrow$ 20-case practice annotation $\rightarrow$ consistency test (passage rate $>$80\% required for participation in formal annotation). The purpose of training was not merely rule memorization but establishing consensus on judgment standards through repeated discussion of borderline cases---particularly for continuous quantities such as knee valgus degree and trunk flexion angle that must be discretized into 0/1 or 0/1/2 scores.
+
+  Three keyframes were annotated for each trial: the start frame (when the participant begins leaving the box, defining the analysis window onset), the IC frame (when the feet first contact the ground, the primary LESS reference time point), and the MKF frame (when knee flexion angle reaches its maximum, the secondary reference time point). The 17 LESS items were then scored at IC and MKF as specified in the original LESS protocol\textsuperscript{11}, with total scores ranging from 0 to 19 and risk categories defined as: Excellent ($\leq$4), Good (5--6), Moderate (7--9), and Poor ($\geq$10).
+
+  A dual-rater independent annotation protocol with arbitration was employed: two raters independently scored each video, and items with concordant scores were directly adopted while discordant items were resolved by a third expert arbitrator. Independent annotation rather than consensus discussion was chosen to obtain authentic inter-rater reliability data---if raters discussed before annotating, reliability statistics would be artificially inflated and fail to reflect the inherent subjectivity of LESS scoring. All annotations preserve original dual-rater scores, concordance judgments, and arbitration records, enabling users to analyze which items exhibit greater subjectivity and to incorporate this information as priors in automated scoring model design.
+
+  LESS-Annotator is released as open-source software at \href{https://github.com/wangyongxuan2019/LessAnnotation}{LessAnnotation}.
+
+% ============================================================
+% Data Records
+% ============================================================
+  \section*{Data Records}
+
+  The LESS-200 dataset is hosted on Figshare/Zenodo (DOI: \_\_\_) under a CC BY 4.0 license. Table~\ref{tab:overview} summarizes the data components.
+
+  \begin{table}[htbp]
+    \centering
+    \caption{Overview of LESS-200 dataset components.}
+    \label{tab:overview}
+    \begin{tabular}{lccc}
+      \toprule
+      \textbf{Data Type} & \textbf{Count} & \textbf{Format} & \textbf{Size (per file)} \\
+      \midrule
+      Frontal videos & $\sim$1,000 & MP4 (H.264) & 50--100\,MB \\
+      Sagittal videos & $\sim$1,000 & MP4 (H.264) & 50--100\,MB \\
+      Frontal keypoints & $\sim$1,000 & JSON & 1--5\,MB \\
+      Sagittal keypoints & $\sim$1,000 & JSON & 1--5\,MB \\
+      Keyframe annotations & 1 & CSV & $\sim$100\,KB \\
+      LESS scores & 1 & CSV & $\sim$200\,KB \\
+      Annotator agreement & 1 & CSV & $\sim$50\,KB \\
+      Subject metadata & 1 & CSV & $\sim$20\,KB \\
+      Recording log & 1 & CSV & $\sim$50\,KB \\
+      Synchronization validation & 1 & CSV & $\sim$10\,KB \\
+      \bottomrule
+    \end{tabular}
+  \end{table}
+
+  \textbf{Video data.} All videos are encoded in H.264 within MP4 containers at 1920$\times$1080 resolution and 60\,fps, with each clip spanning approximately 3--8 seconds to cover the complete action cycle from box departure through reactive jump landing. Each trial comprises one frontal and one sagittal synchronized video. The choice of 60\,fps over 30\,fps reflects the temporal characteristics of the DVJ landing phase: critical events (foot-ground contact, maximum knee flexion) occur within extremely brief intervals, and 60\,fps provides approximately 16.7\,ms temporal resolution, enabling more precise IC and MKF frame localization and finer-grained input for automated keyframe detection algorithms.
+
+  \textbf{Keypoint data.} Stored in JSON format with per-frame records of 33 body keypoints including normalized 2D coordinates and confidence scores. Each file includes metadata (video identifier, frame rate, resolution, pose model version) followed by a frame-indexed array of keypoint records.
+
+  \textbf{Keyframe annotations} (\texttt{keyframes.csv}) contain: video identifier, start frame, IC frame, MKF frame, annotator identifiers, inter-annotator frame differences for IC and MKF, and the resolution method (consensus or arbitration).
+
+  \textbf{LESS scores} (\texttt{less\_scores.csv}) contain: video identifier, 17 individual item scores (\texttt{item\_01} through \texttt{item\_17}), total score (0--19), risk level category, annotator identifiers, number of concordant items (0--17), and score determination method.
+
+  \textbf{Subject metadata} (\texttt{subjects.csv}) contain: subject identifier, sex, age, height (cm), weight (kg), BMI, dominant leg, sport type, athletic level (national\_1, national\_2, sub\_level, or general), training years, training frequency, de-identified injury history, and test date. No personally identifiable information (name, contact details) is included.
+
+  \textbf{Recording log} (\texttt{recording\_log.csv}) contain: video identifier, subject identifier, trial number, retake status, synchronization status, synchronization offset (ms), recording duration (s), quality check result (pass/fail/marginal), and notes.
+
+  The dataset directory structure is organized as shown in Figure~\ref{fig:directory}.
+
+  \begin{figure}[htbp]
+    \centering
+    \begin{forest}
+      for tree={
+        font=\ttfamily,
+        grow'=0,
+        child anchor=west,
+        parent anchor=south,
+        anchor=west,
+        calign=first,
+        edge path={
+          \noexpand\path [draw, \forestoption{edge}]
+          (!u.south west) +(7.5pt,0) |- node[fill,inner sep=1.25pt] {} (.child anchor)\forestoption{edge label};
+        },
+        before typesetting nodes={
+          if n=1
+            {insert before={[,phantom]}}
+            {}
+        },
+        fit=band,
+        before computing xy={l=15pt},
+      }
+      [LESS-200/
+      [videos/
+      [front/ \normalfont\textit{~--- front\_s001\_m01\_e1.mp4, \ldots}]
+      [side/ \normalfont\textit{~--- side\_s001\_m01\_e1.mp4, \ldots}]
+      ]
+      [keypoints/
+      [front/ \normalfont\textit{~--- front\_s001\_m01\_e1.json, \ldots}]
+      [side/ \normalfont\textit{~--- side\_s001\_m01\_e1.json, \ldots}]
+      ]
+      [annotations/
+      [keyframes.csv]
+      [less\_scores.csv]
+      [annotator\_agreement.csv]
+      ]
+      [metadata/
+      [subjects.csv]
+      [recording\_log.csv]
+      [sync\_validation.csv]
+      ]
+      [splits/
+      [recommended\_splits.json]
+      ]
+      [code/
+      [dataloader.py]
+      [visualization.py]
+      [requirements.txt]
+      ]
+      [README.md]
+      ]
+    \end{forest}
+    \caption{Directory structure of the LESS-200 dataset.}
+    \label{fig:directory}
+  \end{figure}
+
+% ============================================================
+% Technical Validation
+% ============================================================
+  \section*{Technical Validation}
+
+  This section addresses four questions that reviewers and users will consider essential: whether video acquisition quality meets standards, whether dual-view synchronization satisfies the precision requirements for LESS assessment, whether pose estimation outputs are reliable, and whether expert annotations are consistent. Each question is answered with reproducible validation methods and quantitative evidence.
+
+  \subsection*{Video Quality Assessment}
+
+  All videos underwent programmatic quality verification for resolution consistency (1080p), frame rate consistency (60\,fps), and file integrity. Overall yield statistics are reported: total number of recorded trial sets, number of valid sets, number of excluded sets, and exclusion rate. Excluded data are categorized by cause (non-standard movement execution, image quality issues, synchronization anomalies), with the distribution presented in Figure~\ref{fig:exclusion}. Reporting the exclusion rate allows users to assess the maturity of the standardized collection protocol---lower exclusion rates indicate more rigorous protocol execution and indirectly reflect RecSync system stability in real-world data collection.
+
+  \begin{figure}[htbp]
+    \centering
+% TODO: Insert exclusion cause distribution chart
+    \fbox{\parbox{0.8\textwidth}{\centering\vspace{3cm}\textit{[Exclusion cause distribution chart to be inserted]}\vspace{3cm}}}
+    \caption{Distribution of excluded trial sets by cause category.}
+    \label{fig:exclusion}
+  \end{figure}
+
+  \subsection*{Synchronization Accuracy Validation}
+
+  Synchronization accuracy directly determines whether the dual-view correspondence at any given time point holds. Validation employed the smartphone stopwatch method: a smartphone displaying millisecond-resolution elapsed time was placed at the center of the overlapping field of view of both cameras, and synchronized recordings were made using RecSync for 10 trials of 10--15 seconds each. Post-hoc frame-by-frame review of both video streams was used to identify corresponding frames showing identical millisecond digits on the stopwatch display, and frame differences were computed.
+
+  This method offers three advantages: (1) zero-cost verification equipment that any team can reproduce; (2) millisecond stopwatch display provides sub-frame visual reference---although final precision is bounded by the frame rate (16.7\,ms at 60\,fps), this suffices to verify frame-level synchronization; and (3) results are intuitively interpretable without requiring understanding of complex signal processing procedures. To enhance statistical reliability, the 10 recordings were distributed across different system operation phases (immediately after initial synchronization, after 30 minutes of operation, and after resynchronization) to capture the effects of clock drift and network state variation.
+
+  Validation results are summarized in Table~\ref{tab:sync}. An impact analysis contextualizes the synchronization error relative to LESS assessment requirements: the IC-to-MKF interval typically spans 200--500\,ms (12--30 frames at 60\,fps), and a synchronization error of approximately 1 frame ($\sim$17\,ms) constitutes only 3--8\% of this time window. All 17 LESS items are discrete scores (0/1 or 0/1/2), and the corresponding postural changes occur over time scales of tens to hundreds of milliseconds, far exceeding the synchronization error. Frame-level synchronization accuracy therefore does not materially affect LESS scoring.
+
+  \begin{table}[htbp]
+    \centering
+    \caption{Synchronization accuracy validation results.}
+    \label{tab:sync}
+    \begin{tabular}{lc}
+      \toprule
+      \textbf{Metric} & \textbf{Value} \\
+      \midrule
+      Number of validation trials & 10 \\
+      Mean error & $x.x$ frames ($xx.x$\,ms) \\
+      Standard deviation & $x.x$ frames ($xx.x$\,ms) \\
+      Maximum error & $x$ frames ($xx$\,ms) \\
+      95\% confidence interval & [$x$, $x$]\,ms \\
+      Proportion with 0-frame error & $xx$\% \\
+      Proportion with $\leq$1-frame error & $xx$\% \\
+      \bottomrule
+    \end{tabular}
+  \end{table}
+
+  \subsection*{Pose Estimation Quality}
+
+  Pose estimation data are released as derived convenience data, and their accuracy determines the trustworthiness of downstream keypoint-based research. For validation, $x$ trial sets were randomly sampled, and researchers manually annotated LESS-relevant joint positions (knee, hip, ankle, shoulder, toe) on keyframes (IC and MKF frames), comparing these against algorithmic estimates.
+
+  Reported metrics include detection success rate (proportion of frames with complete body keypoint detection) and Percentage of Correct Keypoints at thresholds of 0.05 and 0.1 (PCK@0.05 and PCK@0.1) for each keypoint. Results emphasize joints directly relevant to LESS assessment, as precision at these specific joints is more meaningful than whole-body averages for LESS scoring purposes. Typical failure cases (limb cross-occlusion, motion blur, loose clothing covering joints) are also analyzed to provide users with realistic expectations of keypoint reliability. It should be emphasized that the keypoint data are positioned as ``pre-computed convenience data'' rather than ``ground truth''; users may decide whether to use the provided data or extract their own based on the accuracy information presented here.
+
+  \subsection*{Inter-Rater and Intra-Rater Reliability}
+
+  Annotation quality constitutes the core evidence for whether the dataset can serve as a ``gold standard'' for supervised learning.
+
+  \textbf{Keyframe consistency.} Mean frame differences and standard deviations between the two annotators for IC and MKF frames are reported. IC frame consistency is expected to be higher because the visual signal of foot-ground contact is relatively unambiguous, whereas MKF frame consistency may be slightly lower because knee flexion angle changes gradually near the maximum, creating a multi-frame ambiguous zone where different annotators may select different frames within this interval. This difference is itself informative and is reported transparently.
+
+  \textbf{LESS item-level inter-rater reliability} (Table~\ref{tab:reliability}). Cohen's Kappa, agreement rate, and arbitration rate are reported individually for each of the 17 items. Expected patterns include: (1) binary items (0/1) typically achieving higher Kappa than ternary items (0/1/2), as the latter introduce an additional judgment boundary; (2) sagittal-view items (knee flexion angle, trunk flexion) typically showing higher consistency than frontal-view items (knee valgus, foot pronation), because sagittal-plane angular changes are larger and easier to judge visually, while frontal-plane subtle displacements depend more heavily on subjective assessment; and (3) the overall impression item (Item 17) exhibiting the lowest Kappa due to its inherently subjective nature. The intraclass correlation coefficient (ICC) for LESS total scores reflects overall reliability after aggregation across all 17 items.
+
+  \begin{table}[htbp]
+    \centering
+    \caption{Inter-rater reliability for each of the 17 LESS items.}
+    \label{tab:reliability}
+    \begin{tabular}{clccc}
+      \toprule
+      \textbf{Item} & \textbf{Description} & \textbf{Cohen's $\kappa$} & \textbf{Agreement (\%)} & \textbf{Arbitration (\%)} \\
+      \midrule
+      1 & Knee flexion at IC & $x.xx$ & $xx.x$ & $xx.x$ \\
+      2 & Hip flexion at IC & $x.xx$ & $xx.x$ & $xx.x$ \\
+      3 & Trunk flexion at IC & $x.xx$ & $xx.x$ & $xx.x$ \\
+      4 & Ankle plantar flexion at IC & $x.xx$ & $xx.x$ & $xx.x$ \\
+      5 & Knee valgus at IC & $x.xx$ & $xx.x$ & $xx.x$ \\
+      6 & Lateral trunk flexion at IC & $x.xx$ & $xx.x$ & $xx.x$ \\
+      7 & Stance width at IC & $x.xx$ & $xx.x$ & $xx.x$ \\
+      8 & Foot rotation at IC & $x.xx$ & $xx.x$ & $xx.x$ \\
+      9 & Symmetric foot contact at IC & $x.xx$ & $xx.x$ & $xx.x$ \\
+      10 & Knee flexion displacement & $x.xx$ & $xx.x$ & $xx.x$ \\
+      11 & Hip flexion at MKF & $x.xx$ & $xx.x$ & $xx.x$ \\
+      12 & Trunk flexion at MKF & $x.xx$ & $xx.x$ & $xx.x$ \\
+      13 & Knee valgus displacement & $x.xx$ & $xx.x$ & $xx.x$ \\
+      14 & Joint displacement & $x.xx$ & $xx.x$ & $xx.x$ \\
+      15 & Stance width at MKF & $x.xx$ & $xx.x$ & $xx.x$ \\
+      16 & Foot rotation at MKF & $x.xx$ & $xx.x$ & $xx.x$ \\
+      17 & Overall impression & $x.xx$ & $xx.x$ & $xx.x$ \\
+      \midrule
+      \multicolumn{2}{l}{LESS total score (ICC)} & \multicolumn{3}{c}{$x.xx$} \\
+      \bottomrule
+    \end{tabular}
+  \end{table}
+
+  \textbf{Intra-rater reliability.} A random 10\% subsample ($\sim$100 trial sets) was re-annotated after a 2-week interval, with per-item Kappa and ICC reported. Intra-rater reliability reflects temporal stability of annotation---if the same rater assigns different scores to the same video at different times, this indicates inherent uncertainty in the judgment standard for that item.
+
+  \subsection*{Dataset Statistics}
+
+  \textbf{Participant characteristics.} Descriptive statistics (mean $\pm$ SD) for age, height, weight, BMI, and training years are reported for the full sample and stratified by sex, sport type, and athletic level, with group differences tested using independent-samples $t$-tests or one-way ANOVA. These data help users evaluate the dataset's applicability to their target populations.
+
+  \textbf{LESS score distributions.} Total score histograms, per-item error rates (proportion scoring $\geq$1, reflecting how frequently each item is triggered), and group-stratified box plots (by sex, sport type, athletic level) are presented. Score distribution shape directly affects downstream task performance: if total scores are heavily concentrated in one range, models will have insufficient training data at the extremes. The stratified sampling design partially mitigates this issue, but if the actual distribution remains skewed, this is reported transparently with discussion of implications for model training.
+
+% ============================================================
+% Usage Notes
+% ============================================================
+  \section*{Usage Notes}
+
+  \subsection*{Access and License}
+
+  The dataset is available at Figshare/Zenodo (DOI: \_\_\_) under a Creative Commons Attribution 4.0 International (CC BY 4.0) license. RecSync source code is available at \href{https://github.com/wangyongxuan2019/RecSync-Multiplatform}{RecSync-Multiplatform}. LESS-Annotator source code is available at \href{https://github.com/wangyongxuan2019/LessAnnotation}{LessAnnotation}. A BibTeX citation entry is provided with the dataset.
+
+  \subsection*{Recommended Applications}
+
+  LESS-200 supports multiple research directions: automated LESS scoring (predicting 17-item scores from video or keypoint sequences), keyframe detection (automatically locating IC and MKF frames), sports pose estimation benchmarking, injury risk stratification (LESS risk category classification), and dual-view 3D reconstruction (leveraging synchronized dual-view data for 3D pose estimation).
+
+  \subsection*{Data Splits}
+
+  We recommend subject-level data splits (not video-level) to prevent different trials from the same participant appearing in both training and test sets---a common source of data leakage in movement analysis, as different trials from the same individual exhibit highly similar movement patterns. The recommended split is 70\%/15\%/15\% with stratified sampling by sex $\times$ athletic level to ensure consistent population distributions across subsets. Pre-defined splits are provided in \texttt{splits/recommended\_splits.json}.
+
+  \subsection*{Baseline Results}
+
+  Baseline model results are provided as reference benchmarks for future research. The value of baselines lies not in optimal performance but in reproducibility---researchers using the dataset can first replicate baseline results to verify correct data loading and evaluation procedures, then improve upon them. All baseline experiments use the aforementioned subject-level 70\%/15\%/15\% data splits, ensuring no subject overlap between training and test sets.
+
+  \textbf{Task 1: Keyframe detection.} The goal is to automatically locate IC and MKF frames from video keypoint sequences. Three baseline methods were implemented: (1) \textbf{Rule-based}: detects IC frames via zero-crossings of the first derivative of ankle $y$-coordinates, and MKF frames via minima of the knee flexion angle; (2) \textbf{Multi-layer perceptron (MLP)}: takes keypoint coordinates within a sliding window as input and performs per-frame binary classification; (3) \textbf{Long short-term memory (LSTM)}: takes the full-trial keypoint sequence as input and outputs per-frame keyframe probabilities. Evaluation metrics are the absolute frame error ($|\Delta f|$) between predicted and annotated frames, and the percentage of predictions within $\leq$1 and $\leq$3 frames of ground truth.
+
+  \textbf{Task 2: Automated LESS scoring.} The goal is to predict the 17 individual LESS item scores from dual-view keypoint features at IC and MKF frames. Two baseline methods were implemented: (1) \textbf{Random Forest (RF)}: uses hand-crafted features (joint angles, inter-joint distances) at IC and MKF frames as input, training an independent classifier per item; (2) \textbf{Multi-task MLP}: takes concatenated frontal and sagittal keypoint coordinates at IC and MKF frames as input, with shared hidden layers and 17 output heads for multi-task learning. Evaluation metrics include: per-item accuracy (Item Accuracy), 17-item mean accuracy (Mean Item Accuracy), total score mean absolute error (Total Score MAE), and risk category classification accuracy.
+
+  \textbf{Task 3: Risk category classification.} The goal is to map LESS total scores to four risk categories (Excellent/Good/Moderate/Poor). In addition to threshold-based classification from Task 2 predicted total scores, \textbf{Support Vector Machine (SVM)} and a classification variant of the \textbf{Multi-task MLP} were trained as independent classifiers, reporting four-class accuracy and weighted F1 score.
+
+  Baseline results are summarized in Tables~\ref{tab:baseline_keyframe} and \ref{tab:baseline_scoring}.
+
+  \begin{table}[htbp]
+    \centering
+    \caption{Keyframe detection baseline results. $|\Delta f|$ denotes mean absolute frame error between predicted and annotated frames.}
+    \label{tab:baseline_keyframe}
+    \begin{tabular}{lccccc}
+      \toprule
+      \multirow{2}{*}{\textbf{Method}} & \multicolumn{2}{c}{\textbf{IC Frame}} & \multicolumn{2}{c}{\textbf{MKF Frame}} \\
+      \cmidrule(lr){2-3} \cmidrule(lr){4-5}
+      & $|\Delta f|$ & $\leq$3 frames (\%) & $|\Delta f|$ & $\leq$3 frames (\%) \\
+      \midrule
+      Rule-based & $x.x$ & $xx.x$ & $x.x$ & $xx.x$ \\
+      MLP & $x.x$ & $xx.x$ & $x.x$ & $xx.x$ \\
+      LSTM & $x.x$ & $xx.x$ & $x.x$ & $xx.x$ \\
+      \bottomrule
+    \end{tabular}
+  \end{table}
+
+  \begin{table}[htbp]
+    \centering
+    \caption{Automated LESS scoring baseline results.}
+    \label{tab:baseline_scoring}
+    \begin{tabular}{lcccc}
+      \toprule
+      \textbf{Method} & \textbf{Mean Item Acc. (\%)} & \textbf{Total MAE} & \textbf{Risk Acc. (\%)} & \textbf{Weighted F1} \\
+      \midrule
+      RF & $xx.x$ & $x.x$ & $xx.x$ & $0.xx$ \\
+      Multi-task MLP & $xx.x$ & $x.x$ & $xx.x$ & $0.xx$ \\
+      SVM (classification) & --- & --- & $xx.x$ & $0.xx$ \\
+      \bottomrule
+    \end{tabular}
+  \end{table}
+
+  Baseline code, training configurations, and pre-trained weights are released alongside the dataset in the \texttt{code/} directory for direct reproducibility. It should be emphasized that these baselines employ minimal model architectures with default hyperparameters and no systematic tuning, intended to provide a reproducible performance lower bound rather than an optimal solution. More sophisticated temporal models (e.g., Transformers), multi-view fusion strategies, and end-to-end video models represent promising directions for improvement.
+
+  \subsection*{Known Limitations}
+
+  Several limitations should be considered when using this dataset. First, the sample size of approximately 200 participants is smaller than large-scale military cadet studies (Padua et al.\textsuperscript{11}: 2,691; Eckard et al.\textsuperscript{32}: 2,235), but LESS-200 was designed to maximize score distribution breadth rather than sample size---athletic-level-stratified sampling achieves adequate coverage across the 0--19 score range, whereas military cadet populations may concentrate scores in the low-to-moderate range due to relatively uniform fitness levels. Second, all participants were recruited from a single university, limiting geographic and demographic representativeness; however, within-sample diversity in sport type, athletic level, and sex provides internal heterogeneity, and the open-source RecSync and LESS-Annotator tools enable other teams to replicate collection in different venues and populations and expand the dataset. Third, software synchronization does not achieve hardware genlock precision, but validation demonstrates that frame-level accuracy meets LESS assessment requirements. Fourth, keypoint data are algorithmically estimated rather than optically tracked ground truth, positioned as convenience data with accuracy validation provided. Fifth, LESS scoring follows the original 17-item version by Padua et al. (2009)\textsuperscript{11} and does not include the LESS-22 extended items proposed by Eckard et al.\textsuperscript{32} (e.g., asymmetrical loading, knee wobble), in order to maintain comparability with the majority of existing literature.
+
+% ============================================================
+% Code Availability
+% ============================================================
+  \section*{Code Availability}
+
+  The complete toolchain underlying this dataset is openly available:
+
+  \begin{itemize}[nosep]
+\item \textbf{RecSync}: Multi-device synchronized video recording system. GitHub: \url{https://github.com/wangyongxuan2019/RecSync-Multiplatform}
+\item \textbf{LESS-Annotator}: Purpose-built LESS expert annotation system. GitHub: \url{https://github.com/wangyongxuan2019/LessAnnotation}
+\item \textbf{LESS-200 Code}: Data loading, visualization, and baseline models. GitHub: [URL]
+  \end{itemize}
+
+  These three tools collectively cover the end-to-end pipeline from data acquisition through annotation to usage. This means LESS-200 is not merely a static data resource but a reproducible, extensible data production pipeline---other teams can use RecSync to collect new data in different venues and populations, LESS-Annotator to perform standardized annotation, and then merge new data with LESS-200 to build larger-scale benchmarks. This ``toolchain + dataset'' open-source model represents the defining difference between LESS-200 and existing LESS research.
+
+% ============================================================
+% Acknowledgements
+% ============================================================
+  \section*{Acknowledgements}
+
+  We thank all participants who contributed to data collection and all raters who participated in the annotation process. This work was supported by \_\_\_ (Grant No.: \_\_\_).
+
+% ============================================================
+% Author Contributions
+% ============================================================
+  \section*{Author Contributions}
+
+  Author contributions are declared using the CRediT taxonomy. Y.W.: Conceptualization, Methodology, Software, Data Curation, Writing---Original Draft. Author Two: \_\_\_. Author Three: \_\_\_. Author Four: Project Administration, Writing---Review \& Editing, Funding Acquisition. All authors reviewed and approved the final manuscript.
+
+% ============================================================
+% Competing Interests
+% ============================================================
+  \section*{Competing Interests}
+
+  The authors declare no competing interests.
+
+% ============================================================
+% References
+% ============================================================
+  \begin{thebibliography}{99}
+
+    \bibitem{ref1} Sanders, T. L., Maradit Kremers, H., Stuart, M. J., et al. Incidence of anterior cruciate ligament tears and reconstruction: a 21-year population-based study. \textit{Am. J. Sports Med.} \textbf{44}, 1502--1507 (2016).
+
+    \bibitem{ref2} Montalvo, A. M., Schneider, D. K., Yut, L., et al. ``What's my risk of sustaining an ACL injury while playing sports?'' A systematic review with meta-analysis. \textit{Br. J. Sports Med.} \textbf{53}, 1003--1012 (2019).
+
+    \bibitem{ref3} Herzog, M. M., Marshall, S. W., Lund, J. L., et al. Cost of outpatient arthroscopic anterior cruciate ligament reconstruction among commercially insured patients in the United States, 2005--2013. \textit{Orthop. J. Sports Med.} \textbf{5}, 2325967116684776 (2017).
+
+    \bibitem{ref4} Wiggins, A. J., Grandhi, R. K., Schneider, D. K., et al. Risk of secondary injury in younger athletes after anterior cruciate ligament reconstruction: a systematic review and meta-analysis. \textit{Am. J. Sports Med.} \textbf{44}, 1861--1876 (2016).
+
+    \bibitem{ref5} Luc, B., Gribble, P. A. \& Pietrosimone, B. G. Osteoarthritis prevalence following anterior cruciate ligament reconstruction: a systematic review and numbers-needed-to-treat analysis. \textit{J. Athl. Train.} \textbf{49}, 806--819 (2014).
+
+    \bibitem{ref6} Prodromos, C. C., Han, Y., Rogowski, J., et al. A meta-analysis of the incidence of anterior cruciate ligament tears as a function of gender, sport, and a knee injury--reduction regimen. \textit{Arthroscopy} \textbf{23}, 1320--1325 (2007).
+
+    \bibitem{ref7} Arendt, E. \& Dick, R. Knee injury patterns among men and women in collegiate basketball and soccer: NCAA data and review of literature. \textit{Am. J. Sports Med.} \textbf{23}, 694--701 (1995).
+
+    \bibitem{ref8} Hewett, T. E., Myer, G. D., Ford, K. R., et al. Biomechanical measures of neuromuscular control and valgus loading of the knee predict anterior cruciate ligament injury risk in female athletes: a prospective study. \textit{Am. J. Sports Med.} \textbf{33}, 492--501 (2005).
+
+    \bibitem{ref9} Sugimoto, D., Myer, G. D., Foss, K. D., et al. Specific exercise effects of preventive neuromuscular training intervention on anterior cruciate ligament injury risk reduction in young females: meta-analysis and subgroup analysis. \textit{Br. J. Sports Med.} \textbf{49}, 282--289 (2015).
+
+    \bibitem{ref10} Webster, K. E. \& Hewett, T. E. Meta-analysis of meta-analyses of anterior cruciate ligament injury reduction training programs. \textit{J. Orthop. Res.} \textbf{36}, 2696--2708 (2018).
+
+    \bibitem{ref11} Padua, D. A., Marshall, S. W., Boling, M. C., et al. The Landing Error Scoring System (LESS) is a valid and reliable clinical assessment tool of jump-landing biomechanics. \textit{Am. J. Sports Med.} \textbf{37}, 1996--2002 (2009).
+
+    \bibitem{ref12} Padua, D. A., DiStefano, L. J., Beutler, A. I., et al. The Landing Error Scoring System as a screening tool for an anterior cruciate ligament injury--prevention program in elite-youth soccer athletes. \textit{J. Athl. Train.} \textbf{50}, 589--595 (2015).
+
+    \bibitem{ref13} Onate, J. A., Cortes, N., Welch, C., et al. Expert versus novice interrater reliability and criterion validity of the Landing Error Scoring System. \textit{J. Sport Rehabil.} \textbf{19}, 41--56 (2010).
+
+    \bibitem{ref14} Deng, J., Dong, W., Socher, R., et al. ImageNet: a large-scale hierarchical image database. In \textit{Proc. IEEE Conf. Comput. Vis. Pattern Recognit.} 248--255 (2009).
+
+    \bibitem{ref15} Lin, T. Y., Maire, M., Belongie, S., et al. Microsoft COCO: common objects in context. In \textit{Proc. Eur. Conf. Comput. Vis.} 740--755 (2014).
+
+    \bibitem{ref16} Mauntel, T. C., Padua, D. A., Stanley, L. E., et al. Automated quantification of the Landing Error Scoring System with a markerless motion-capture system. \textit{J. Athl. Train.} \textbf{52}, 1002--1009 (2017).
+
+    \bibitem{ref17} Lugaresi, C., Tang, J., Nash, H., et al. MediaPipe: a framework for building perception pipelines. \textit{arXiv preprint} arXiv:1906.08172 (2019).
+
+    \bibitem{ref18} Mills, D. L. Internet time synchronization: the network time protocol. \textit{IEEE Trans. Commun.} \textbf{39}, 1482--1493 (1991).
+
+    \bibitem{ref19} Clar, C., Sengoku, H., Witte, K., et al. Reducing ACL injury risk: a meta-analysis of prevention programme effectiveness. \textit{Knee Surg. Sports Traumatol. Arthrosc.} (2025). https://doi.org/10.1007/s00167-025-08456-y
+
+    \bibitem{ref20} Nuri, L., Reza Kordi, M., Iranpour, F., et al. Neuromuscular training for preventing knee injuries in female team athletes: a meta-analysis. \textit{Ann. Med.} \textbf{57}, 2581891 (2025).
+
+    \bibitem{ref21} Turner, J. A., Reiche, E. T., Hartshorne, M. T., et al. Open source, open science: development of OpenLESS as the automated Landing Error Scoring System. \textit{J. Athl. Train.} (2025). https://doi.org/10.4085/1062-6050-0666.24
+
+    \bibitem{ref22} Conoscenti, M., Buzzichelli, C., Romagnoli, C., et al. Commercial vision sensors and AI-based pose estimation frameworks for markerless motion analysis in sports and exercises: a mini review. \textit{Front. Physiol.} \textbf{16}, 1649330 (2025).
+
+    \bibitem{ref23} Zheng, Y., Liu, Y., Wang, Z., et al. A comprehensive analysis of machine learning pose estimation models used in human movement and posture analyses: a narrative review. \textit{Heliyon} \textbf{10}, e39821 (2024).
+
+    \bibitem{ref24} Farinelli, V., Aquino, G., Gianola, S., et al. Landing error scoring system: a scoping review about variants, reference values and differences according to sex and sport. \textit{Phys. Ther. Sport} \textbf{68}, 11--20 (2024).
+
+    \bibitem{ref25} Cao, Z., Hidalgo, G., Simon, T., Wei, S.-E. \& Sheikh, Y. OpenPose: Realtime multi-person 2D pose estimation using part affinity fields. \textit{IEEE Trans. Pattern Anal. Mach. Intell.} \textbf{43}, 172--186 (2021).
+
+    \bibitem{ref26} Andriluka, M., Iqbal, U., Insafutdinov, E., et al. PoseTrack: A benchmark for human pose estimation and tracking. In \textit{Proc. IEEE Conf. Comput. Vis. Pattern Recognit.} 5167--5176 (2018).
+
+    \bibitem{ref27} Kay, W., Carreira, J., Simonyan, K., et al. The Kinetics human action video dataset. \textit{arXiv preprint} arXiv:1705.06950 (2017).
+
+    \bibitem{ref28} IEEE. IEEE Standard for a Precision Clock Synchronization Protocol for Networked Measurement and Control Systems. \textit{IEEE Std. 1588-2008} (2008).
+
+    \bibitem{ref29} Mehta, D., Sotnychenko, O., Mueller, F., et al. XNect: Real-time multi-person 3D motion capture with a single RGB camera. \textit{ACM Trans. Graph.} \textbf{39}(4), Article 82 (2020).
+
+    \bibitem{ref30} Hebert-Losier, K., Hanzlikova, I., Zheng, C., Streeter, L. \& Mayo, M. The DEEP LESS: automated Landing Error Scoring System using deep learning. \textit{Appl. Sci.} \textbf{10}, 892 (2020).
+
+    \bibitem{ref31} Cameron, K. L., Peck, K. Y., Davi, S. M., et al. Landing Error Scoring System items are associated with stress fracture incidence in United States Military Academy cadets. \textit{Orthop. J. Sports Med.} \textbf{10}, 23259671221100790 (2022).
+
+    \bibitem{ref32} Eckard, T. G., Miraldi, S. F. P., Peck, K. Y., et al. Automated Landing Error Scoring System and bone stress injury incidence in cadets at the United States Military Academy. \textit{J. Athl. Train.} \textbf{57}, 379--385 (2022).
+
+  \end{thebibliography}
+
+\end{document}
